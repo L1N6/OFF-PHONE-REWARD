@@ -7,26 +7,26 @@
 
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
-| Phase 0: Setup | 4 | 0 | 0% |
+| Phase 0: Setup | 4 | 1 | 25% |
 | Phase 1: Session Auth | 3 | 0 | 0% |
 | Phase 2: Timer, Phases & Blind Box | 7 | 0 | 0% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **0** | **0%** |
+| **Tổng MVP (🟢)** | **25** | **1** | **4%** |
 
 ---
 
 ## Phase 0 — Setup
 
-### [ ] T0-1: Initialize Next.js project
+### [x] T0-1: Initialize Next.js project
 **Deps:** Không
 **Context:** Scaffold project với TypeScript, Tailwind, App Router (không dùng Pages Router). ESLint. Xoá boilerplate mặc định.
 **Checklist:**
-- [ ] `npx create-next-app@latest --typescript --tailwind --app --eslint`
-- [ ] `.env.example` có đủ keys (xem CLAUDE.md), values để trống
-- [ ] `.gitignore` có: node_modules, .env.local, .next, docs/scratch/*.md
-- [ ] `npm run dev` chạy được localhost:3000
+- [x] `npx create-next-app@latest --typescript --tailwind --app --eslint` (pin **@14** → Next 14.2.35, đúng stack CLAUDE.md)
+- [x] `.env.example` có đủ keys (xem CLAUDE.md), values để trống
+- [x] `.gitignore` có: node_modules, .env.local, .next, docs/scratch/*.md
+- [x] `npm run dev` chạy được localhost:3000 (HTTP 200, GET / 200)
 
 ### [ ] T0-2: Supabase client setup
 **Deps:** T0-1

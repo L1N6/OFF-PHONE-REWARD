@@ -6,11 +6,11 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-03 (reconcile tài liệu, chưa code)
-Task đang làm: T0-1 — Initialize Next.js project
-Bước tiếp theo: Chạy npx create-next-app với --typescript --tailwind --app --eslint
-Task kế tiếp : T0-2 — Supabase client setup
-MVP tiến độ  : 0 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-03 (T0-1 done — scaffold Next.js 14)
+Task đang làm: T0-2 — Supabase client setup
+Bước tiếp theo: `npm install @supabase/supabase-js` → tạo `lib/supabase.ts` export `createPublicClient()` + `createAdminClient()` (admin throw nếu chạy client-side, trỏ pooler 6543)
+Task kế tiếp : T0-3 — Database schema + seed (đầy đủ, scale-ready)
+MVP tiến độ  : 1 / 25 tasks hoàn thành
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -18,13 +18,13 @@ MVP tiến độ  : 0 / 25 tasks hoàn thành
 
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
-| Phase 0: Setup | 4 | 0 | 0% |
+| Phase 0: Setup | 4 | 1 | 25% |
 | Phase 1: Session Auth | 3 | 0 | 0% |
 | Phase 2: Timer, Phases & Blind Box | 7 | 0 | 0% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP** | **25** | **0** | **0%** |
+| **Tổng MVP** | **25** | **1** | **4%** |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -54,6 +54,38 @@ MVP tiến độ  : 0 / 25 tasks hoàn thành
 
 **Task tiếp theo:** T0-1 — Initialize Next.js project
 **Bước tiếp theo:** `npx create-next-app@latest --typescript --tailwind --app --eslint`
+
+### Session 1 — 2026-06-03 — T0-1 Initialize Next.js project
+**Task:** T0-1 — Initialize Next.js project  |  **Kết quả:** ✅
+
+**Files tạo/sửa:**
+- `package.json` — tạo (scaffold), đổi `name` → `off-phone-rewards`. Next 14.2.35, React 18, TS 5, Tailwind 3.4, ESLint 8.
+- `app/layout.tsx` — tạo (scaffold), sửa: `metadata` (title/description tiếng Việt), `lang="vi"`. Giữ `next/font/local` (Geist).
+- `app/page.tsx` — VIẾT LẠI: bỏ demo boilerplate Next, thay placeholder gọn (chỉ để xác nhận scaffold chạy — landing thật là T1-3).
+- `app/globals.css`, `app/fonts/*`, `app/favicon.ico` — scaffold mặc định (giữ).
+- `.env.example` — tạo: 5 keys theo CLAUDE.md (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, VENUE_ID, CASHIER_BYPASS_CODE), values trống + chú thích.
+- `next.config.mjs`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.mjs`, `.eslintrc.json`, `next-env.d.ts`, `package-lock.json` — scaffold (giữ nguyên).
+- `.gitignore` — GIỮ bản đã cấu hình từ trước (không để scaffold ghi đè); đã đủ node_modules + .env*.local + !.env.example + /.next/ + docs/scratch/*.md.
+- `README.md` — giữ bản cũ (không để scaffold ghi đè).
+
+**Test results:**
+- `npm run dev` → ✅ Ready 1792ms, `GET / 200`, body chứa "Off-Phone Rewards".
+- `npx tsc --noEmit` → ✅ PASS (0 lỗi).
+- `npm run lint` → ✅ No ESLint warnings or errors.
+
+**Quyết định kỹ thuật (ADR):**
+- **Pin Next.js 14 (`create-next-app@14` → 14.2.35)** thay vì `@latest` (Next 15/React 19). Lý do: CLAUDE.md ghi rõ stack "Next.js 14"; todo checklist viết `@latest` là mâu thuẫn → honor hợp đồng CLAUDE.md, tránh mismatch React 19 phải sửa sau (đúng tinh thần ADR "scale-ready, không rename sau"). Ghi nhận khác chữ với todo.
+- **Scaffold qua temp `scaffold-tmp/`** rồi move file vào root, KHÔNG chạy in-place. Lý do: `create-next-app` từ chối thư mục đã có `README.md` + `.claude/` (chỉ chấp nhận .git/.gitignore/docs). Cách này giữ nguyên `.gitignore` + `README.md` đã cấu hình, không bị template ghi đè.
+- `--no-src-dir` → `app/` ở root (đúng cấu trúc CLAUDE.md), `--import-alias "@/*"`.
+
+**Vấn đề gặp phải:**
+- `create-next-app@14 _scaffold` fail: npm cấm tên bắt đầu bằng `_` → đổi `scaffold-tmp`.
+- `--skip-install` bị create-next-app@14 bỏ qua (vẫn cài 380 packages). Không sao — đỡ phải `npm install` lại; move cả `node_modules` (cùng ổ D: → rename tức thời).
+- IDE báo diagnostic `Cannot find module './globals.css'` ở layout.tsx → **lành tính**: Next cấp type qua `next-env.d.ts`; `tsc --noEmit` PASS, dev compile OK. Không cần xử lý.
+- Chưa `git commit` (user chưa yêu cầu). Nhiều file mới đang untracked — commit khi user sẵn sàng: `git add -A && git commit -m "T0-1 done"`.
+
+**Task tiếp theo:** T0-2 — Supabase client setup
+**Bước tiếp theo:** `npm install @supabase/supabase-js` → tạo `lib/supabase.ts` export `createPublicClient()` (anon) + `createAdminClient()` (service_role, throw nếu `typeof window !== 'undefined'`, trỏ pooler transaction-mode 6543).
 
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)
