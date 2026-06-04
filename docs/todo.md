@@ -8,12 +8,12 @@
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
 | Phase 0: Setup | 4 | 3 | 75% |
-| Phase 1: Session Auth | 3 | 0 | 0% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 0 | 0% |
+| Phase 1: Session Auth | 3 | 3 | 100% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 1 | 14% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **3** | **12%** |
+| **Tổng MVP (🟢)** | **25** | **7** | **28%** |
 
 ---
 
@@ -51,60 +51,64 @@
 - [x] Seed 20 vouchers `OPR-XXXX-XXXX` status='AVAILABLE' (deterministic md5)
 - [x] Schema apply ~~vào Supabase dashboard~~ — *validate tương đương trên **Postgres 16 (Docker)**; apply lên Supabase thật defer sang T0-4 (cần project/creds). Xem D-015.*
 
-### [ ] T0-4: Vercel deployment
+### [ ] T0-4: Vercel deployment 🔄
 **Deps:** T0-1
 **Context:** Link project Vercel, set env vars, confirm auto-deploy từ main branch.
+**Trạng thái (Session 4):** Nửa Supabase/local ✅ verified — schema/seed đã apply lên Supabase THẬT, `verify:supabase` xanh (venue + 20 voucher + RPC), `npm test` 6 PASS/0 SKIP, `npm run build` exit 0 → **đóng D-014 + D-015**. Nửa Vercel **DEFERRED** (user tạm chưa push/deploy được). Chi tiết: HISTORY Session 4.
 **Checklist:**
 - [ ] Project live trên Vercel URL
-- [ ] Env vars set trong Vercel dashboard (gồm connection string pooler 6543)
+- [ ] Env vars set trong Vercel dashboard (5 biến; URL = `https://lcpfzkjovvnihfueewix.supabase.co` KHÔNG `/rest/v1/`)
 - [ ] Auto-deploy từ git push main hoạt động
 
 ---
 
 ## Phase 1 — Session Auth
 
-### [ ] T1-1: useGuestToken hook
+### [x] T1-1: useGuestToken hook ✅ (Session 5)
 **Deps:** T0-1
 **Context:** `hooks/useGuestToken.ts`. Check localStorage → nếu null: `crypto.randomUUID()` → lưu. Không chạy trong SSR.
 **Checklist:**
-- [ ] Export `{ token, isReady }` — isReady=false trong SSR, true sau hydration
-- [ ] Token persist qua page refresh
-- [ ] Không crash khi SSR (`typeof window !== 'undefined'`)
+- [x] Export `{ token, isReady }` — isReady=false trong SSR, true sau hydration
+- [x] Token persist qua page refresh
+- [x] Không crash khi SSR (`typeof window !== 'undefined'`)
 
-### [ ] T1-2: createSession Server Action
+### [x] T1-2: createSession Server Action ✅ (Session 6)
 **Deps:** T0-3
 **Context:** `actions/createSession.ts` (specs.md §4 Module 1). Validate UUID → rate limit 1/ngày/token/venue → INSERT `start_time = DEFAULT NOW()`. **Idempotency do `uniq_running_session` bảo chứng** (không app-check): bắt unique-violation → SELECT trả phiên RUNNING cũ.
+**Impl:** gói rate-limit + resume + INSERT vào RPC `create_session` (atomic, pooler-safe). Rate-limit theo NGÀY ĐỊA PHƯƠNG `venue.timezone` (không `CURRENT_DATE`/UTC). venue_id từ env. Live test race+resume+rate-limit PASS trên Supabase thật.
 **Checklist:**
-- [ ] Validate UUID format, reject nếu sai
-- [ ] Idempotent qua unique index: gọi 2 lần đồng thời → cùng session_id (KHÔNG tạo 2)
-- [ ] Rate limit: reject nếu có session COMPLETED hôm nay (token+venue, `completed_at::date = CURRENT_DATE`)
-- [ ] `start_time` do server set — không nhận từ client
-- [ ] Dùng `createAdminClient()`
+- [x] Validate UUID format, reject nếu sai
+- [x] Idempotent qua unique index: gọi 2 lần đồng thời → cùng session_id (KHÔNG tạo 2)
+- [x] Rate limit: reject nếu có session COMPLETED hôm nay (token+venue — impl ngày địa phương `venue.timezone`)
+- [x] `start_time` do server set — không nhận từ client
+- [x] Dùng `createAdminClient()`
 
-### [ ] T1-3: Landing page
+### [x] T1-3: Landing page ✅ (Session 7)
 **Deps:** T1-1, T1-2
 **Context:** `app/page.tsx`. Copy theo triết lý PRD §1.2 ("Gác lại mạng xã hội 45 phút", KHÔNG "tắt điện thoại"). Nút START. Flow: createSession → sessionStorage → `/session?id=`.
+**Impl:** Server Component (`app/page.tsx`, force-dynamic) fetch branding venue + fallback → `app/_components/Landing.tsx` (client). Render verify thật `curl` 200 + đủ copy + màu branding.
 **Checklist:**
-- [ ] Copy: 45 phút gác mạng xã hội → giảm 10% ly tiếp theo
-- [ ] START gọi createSession với token từ useGuestToken + unlock AudioContext (gesture)
-- [ ] session_id lưu sessionStorage sau khi tạo
-- [ ] Redirect sang /session sau success
-- [ ] Loading state + error messages thân thiện
-- [ ] Áp `branding` (màu + tên challenge) từ venue
+- [x] Copy: 45 phút gác mạng xã hội → giảm 10% ly tiếp theo
+- [x] START gọi createSession với token từ useGuestToken + unlock AudioContext (gesture)
+- [x] session_id lưu sessionStorage sau khi tạo
+- [x] Redirect sang /session sau success (đích /session là T2-2)
+- [x] Loading state + error messages thân thiện
+- [x] Áp `branding` (màu + tên challenge) từ venue
 
 ---
 
 ## Phase 2 — Timer, Phases & Blind Box
 
-### [ ] T2-1: Session status API
+### [x] T2-1: Session status API ✅ (Session 8)
 **Deps:** T0-3, T1-2
 **Context:** `app/api/session-status/route.ts` (specs.md §4 Module 2). Δt bằng SQL. Map phase. Lazy expiry >2880s.
+**Impl:** RPC `get_session_status` (Δt=`FLOOR(EXTRACT(EPOCH FROM NOW()-start_time))` + lazy-expiry atomic, Invariant #1/#2) trả raw facts; map phase + claim-window ở `lib/sessionStatus.ts` (pure, test offline mọi biên). Route: 400 id sai · 404 không thấy · 200 JSON `no-store`. Offline 6 test PASS; live RPC test + SQL test (`supabase/tests/get_session_status_test.sql`) sẵn — **chờ apply schema.sql lên Supabase**.
 **Checklist:**
-- [ ] `delta_seconds = EXTRACT(EPOCH FROM (NOW() - start_time))` — SQL
-- [ ] Phase mapping: <900→1, 900-2100→2, 2100-2700→3, 2700-2880→CLAIMABLE, >2880→EXPIRED
-- [ ] Lazy expiry: RUNNING và >2880s → UPDATE status='EXPIRED'
-- [ ] Return: `{ delta_seconds, phase, status, sub_quest_passed, claim_window_open, claim_window_expired }`
-- [ ] 404 nếu session_id không tồn tại
+- [x] `delta_seconds = EXTRACT(EPOCH FROM (NOW() - start_time))` — SQL
+- [x] Phase mapping: <900→1, 900-2100→2, 2100-2700→3, 2700-2880→CLAIMABLE, >2880→EXPIRED
+- [x] Lazy expiry: RUNNING và >2880s → UPDATE status='EXPIRED'
+- [x] Return: `{ delta_seconds, phase, status, sub_quest_passed, claim_window_open, claim_window_expired }`
+- [x] 404 nếu session_id không tồn tại
 
 ### [ ] T2-2: Session page + Phase 1 UI
 **Deps:** T2-1

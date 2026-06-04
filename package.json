@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test \"test/**/*.test.ts\"",
-    "verify:supabase": "node --env-file=.env.local scripts/verify-supabase.mjs"
+    "test": "node --use-system-ca --env-file-if-exists=.env.local --import tsx --test \"test/**/*.test.ts\"",
+    "verify:supabase": "node --use-system-ca --env-file=.env.local scripts/verify-supabase.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
