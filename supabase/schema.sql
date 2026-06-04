@@ -282,3 +282,101 @@ BEGIN
 
     RETURN QUERY SELECT v_delta, v_session.status, v_session.sub_quest_passed;
 END $$;
+
+-- =====================================================================
+-- validate_sub_quest(p_session_id, p_venue_id, p_answer, p_confirmed)  🟢
+--   specs.md §3 — Blind Box (MVP: code_entry + physical_action).
+--   • Weekday theo GIỜ QUÁN: EXTRACT(DOW FROM NOW() AT TIME ZONE venue.timezone)
+--     (Invariant #1 — KHÔNG new Date().getDay()). DOW: 0=CN..6=T7, khớp active_weekdays.
+--   • Chọn quest theo INPUT: có p_answer → code_entry; p_confirmed → physical_action.
+--   • code_entry verify bằng pgcrypto: crypt(lower(trim(answer)), hash)=hash (bcrypt $2a$,
+--     KHÔNG cần dep node; KHÔNG trả đáp án về client). physical_action = honor (confirmed).
+--   • Valid → UPDATE sub_quest_passed=TRUE + sub_quest_response. Atomic (Invariant #2).
+--   • Đã pass → idempotent trả valid. Trả {out_valid, out_error}.
+--   SET search_path: crypt() ở public (local) / extensions (Supabase) — 1 def chạy cả hai.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION validate_sub_quest(
+    p_session_id UUID,
+    p_venue_id   UUID,
+    p_answer     TEXT    DEFAULT NULL,
+    p_confirmed  BOOLEAN DEFAULT FALSE
+)
+RETURNS TABLE(out_valid BOOLEAN, out_error TEXT)
+LANGUAGE plpgsql
+SET search_path = public, extensions
+AS $$
+DECLARE
+    v_session focus_sessions%ROWTYPE;
+    v_tz      TEXT;
+    v_config  JSONB;
+    v_dow     INT;
+    v_type    TEXT;
+    v_quest   JSONB;
+    v_hash    TEXT;
+    v_ok      BOOLEAN := FALSE;
+BEGIN
+    SELECT * INTO v_session FROM focus_sessions WHERE id = p_session_id;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT FALSE, 'SESSION_NOT_FOUND'; RETURN;
+    END IF;
+
+    -- Đã hoàn thành quest → idempotent (không cho làm lại, không lỗi).
+    IF v_session.sub_quest_passed THEN
+        RETURN QUERY SELECT TRUE, NULL::TEXT; RETURN;
+    END IF;
+
+    IF v_session.status <> 'RUNNING' THEN
+        RETURN QUERY SELECT FALSE, 'SESSION_NOT_RUNNING'; RETURN;
+    END IF;
+
+    SELECT timezone, sub_quest_config INTO v_tz, v_config
+        FROM venues WHERE id = p_venue_id;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT FALSE, 'VENUE_NOT_FOUND'; RETURN;
+    END IF;
+
+    -- Weekday địa phương (Invariant #1).
+    v_dow := EXTRACT(DOW FROM (NOW() AT TIME ZONE v_tz))::INT;
+
+    -- Loại quest suy từ input.
+    IF p_answer IS NOT NULL THEN
+        v_type := 'code_entry';
+    ELSIF p_confirmed THEN
+        v_type := 'physical_action';
+    ELSE
+        RETURN QUERY SELECT FALSE, 'NO_INPUT'; RETURN;
+    END IF;
+
+    -- Quest đầu tiên đúng loại + active hôm nay.
+    SELECT q INTO v_quest
+    FROM jsonb_array_elements(COALESCE(v_config->'quests', '[]'::jsonb)) AS q
+    WHERE q->>'type' = v_type
+      AND (q->'active_weekdays') @> to_jsonb(v_dow)
+    LIMIT 1;
+
+    IF v_quest IS NULL THEN
+        RETURN QUERY SELECT FALSE, 'NO_QUEST_TODAY'; RETURN;
+    END IF;
+
+    IF v_type = 'code_entry' THEN
+        v_hash := v_quest->'content'->>'answer_hash';
+        IF v_hash IS NULL THEN
+            RETURN QUERY SELECT FALSE, 'QUEST_MISCONFIGURED'; RETURN;
+        END IF;
+        -- bcrypt verify: chuẩn hoá trim+lower trước khi so (khớp cách hash khi seed).
+        v_ok := crypt(lower(btrim(p_answer)), v_hash) = v_hash;
+    ELSE -- physical_action
+        v_ok := p_confirmed;
+    END IF;
+
+    IF NOT v_ok THEN
+        RETURN QUERY SELECT FALSE, 'WRONG_ANSWER'; RETURN;
+    END IF;
+
+    UPDATE focus_sessions
+       SET sub_quest_passed   = TRUE,
+           sub_quest_response  = COALESCE(p_answer, 'confirmed')
+     WHERE id = p_session_id;
+
+    RETURN QUERY SELECT TRUE, NULL::TEXT;
+END $$;

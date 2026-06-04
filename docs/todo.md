@@ -9,11 +9,11 @@
 |---|---|---|---|
 | Phase 0: Setup | 4 | 3 | 75% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 2 | 29% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 3 | 43% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **8** | **32%** |
+| **Tổng MVP (🟢)** | **25** | **9** | **36%** |
 
 ---
 
@@ -157,15 +157,16 @@
 - [ ] Countdown = `serverDelta + (Date.now() - fetchTime)/1000`
 - [ ] Resync mỗi poll thành công, smooth nếu lệch < 5s
 
-### [ ] T2-7: validateSubQuest Server Action 🟢 (MVP: code_entry + physical_action)
+### [x] T2-7: validateSubQuest Server Action 🟢 ✅ (Session 10) (MVP: code_entry + physical_action)
 **Deps:** T0-3
 **Context:** `actions/validateSubQuest.ts` (specs.md §3). Chọn quest theo **weekday tính bằng SQL theo `venue.timezone`** (KHÔNG `new Date().getDay()`).
+**Impl:** RPC `validate_sub_quest` gói weekday + chọn quest theo input (answer→code_entry / confirmed→physical_action) + verify + UPDATE (atomic, Inv #1/#2). `code_entry` verify `crypt(lower(btrim(answer)),hash)=hash` (**pgcrypto** — khỏi dep node, không lộ đáp án). Action map: pass→`{ok,valid:true}`, mã sai→`{ok,valid:false}` (thử lại), lỗi cứng→`{ok:false}`. **Docker SQL 8/8 PASS** (verify bcrypt thật).
 **Checklist:**
-- [ ] Weekday: `EXTRACT(DOW FROM (NOW() AT TIME ZONE venue.timezone))` → match `active_weekdays`
-- [ ] `code_entry`: `bcrypt.compare(answer.trim().toLowerCase(), answer_hash)` — KHÔNG trả đáp án về client
-- [ ] `physical_action`: `confirmed === true`
-- [ ] Valid → `UPDATE focus_sessions SET sub_quest_passed=TRUE, sub_quest_response=$answer`
-- [ ] Không có quest cho hôm nay → lỗi rõ ràng
+- [x] Weekday: `EXTRACT(DOW FROM (NOW() AT TIME ZONE venue.timezone))` → match `active_weekdays`
+- [x] `code_entry`: verify hash `crypt(lower(btrim(answer)),hash)` (pgcrypto thay `bcrypt.compare`) — KHÔNG trả đáp án về client
+- [x] `physical_action`: `confirmed === true`
+- [x] Valid → `UPDATE focus_sessions SET sub_quest_passed=TRUE, sub_quest_response=$answer`
+- [x] Không có quest cho hôm nay → lỗi rõ ràng (`NO_QUEST_TODAY`)
 - [ ] (🟡 numeric_range/observation/free_text: để TODO, chưa làm MVP)
 
 ---

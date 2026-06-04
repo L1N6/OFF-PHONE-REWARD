@@ -6,12 +6,12 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-04 (Session 9 — T2-2 Session page + Phase 1 UI ✅; npm test 31/0/0, build route ƒ, render mọi phase + redirect 307 OK)
-Task đang làm: T2-7 — validateSubQuest Server Action (deps T0-3 ✓ — buildable; unblock T2-3 Blind Box)
-Bước tiếp theo: `actions/validateSubQuest.ts` (specs §3) — chọn quest theo weekday SQL `EXTRACT(DOW FROM NOW() AT TIME ZONE venue.timezone)` match `active_weekdays`; `code_entry` → so khớp `crypt(answer.trim().lower(), hash)=hash` (pgcrypto SQL, KHÔNG lộ đáp án) hoặc `bcryptjs`; `physical_action` → `confirmed===true`; valid → UPDATE sub_quest_passed=TRUE + sub_quest_response. Gói RPC (weekday+verify+update atomic — Invariant #1/#2). ĐỀ XUẤT: RPC pgcrypto để khỏi thêm dep node bcrypt.
-Task kế tiếp : T2-3 — Blind Box UI (deps T2-2 ✓ + T2-7) HOẶC T2-6 Clock sync (2 mục đầu đã có nhờ T2-2)
-⚠️ Treo: (1) T0-4 nửa Vercel (🔄 deferred — cần user); (2) D-017 git push blocked. — ✅ Apply schema ĐÃ XONG (user chạy SQL Editor → live `get_session_status` test PASS, 31/0/0).
-MVP tiến độ  : 8 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-04 (Session 10 — T2-7 validateSubQuest ✅; npm test 32/0/1-skip, Docker SQL validate_sub_quest 8/8 + get_session_status 6/6 PASS, build OK)
+Task đang làm: T2-3 — Phase 2 UI Offline Quest (Blind Box) (deps T2-2 ✓ + T2-7 ✓ — buildable)
+Bước tiếp theo: Thay placeholder Phase 2 ở `app/_components/SessionView.tsx` bằng Blind Box THẬT — render quest hôm nay từ `venue.sub_quest_config`; `code_entry`: ô nhập mã → `validateSubQuest(sid,{answer})` → pass/fail feedback; `physical_action`: nút confirm → `validateSubQuest(sid,{confirmed:true})`; khi `sub_quest_passed=true` → trạng thái hoàn thành (khoá, không cho làm lại); `navigator.vibrate([200,100,200])` + visual border pulse (Invariant #4 iOS fallback) + AudioContext beep. Hướng dẫn vật lý: mở Blind Box + Stranger's Notebook.
+Task kế tiếp : T2-4 — Phase 3 Meditation (deps T2-3) HOẶC T2-6 Clock sync (gần xong nhờ T2-2)
+⚠️ Treo: (1) **Apply `supabase/schema.sql`** (thêm `validate_sub_quest`) lên Supabase → live test 33/0/0 (hàm đã proven Docker 8/8); (2) **T0-4 Vercel** — user báo đã làm, CHƯA verify (cần URL); (3) **Commit/push T2-2 + T2-7** (push đã hoạt động — D-017 gỡ).
+MVP tiến độ  : 9 / 25 tasks hoàn thành
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -21,11 +21,11 @@ MVP tiến độ  : 8 / 25 tasks hoàn thành
 |---|---|---|---|
 | Phase 0: Setup | 4 | 3 | 75% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 2 | 29% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 3 | 43% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP** | **25** | **8** | **32%** |
+| **Tổng MVP** | **25** | **9** | **36%** |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -321,6 +321,38 @@ MVP tiến độ  : 8 / 25 tasks hoàn thành
 **Task tiếp theo:** T2-7 — validateSubQuest Server Action (deps T0-3 ✓)
 **Bước tiếp theo:** `actions/validateSubQuest.ts` (specs §3) — weekday SQL theo `venue.timezone`; `code_entry` verify hash (pgcrypto `crypt()` trong RPC, không lộ đáp án); `physical_action` confirmed; valid → UPDATE sub_quest_passed. Gói RPC atomic. ĐỀ XUẤT: pgcrypto trong SQL để khỏi thêm dep node bcrypt.
 
+### Session 10 — 2026-06-04 — T2-7 validateSubQuest Server Action
+**Task:** T2-7 — validateSubQuest Server Action  |  **Kết quả:** ✅
+
+**Bối cảnh:** D-017 ĐÃ GỠ (push hoạt động, remote ở `6178af7`). **Docker máy nay CHẠY LẠI** (Session 6/8/9 không có) → test SQL isolated được.
+
+**Files tạo/sửa:**
+- `supabase/schema.sql` — THÊM function `validate_sub_quest(p_session_id, p_venue_id, p_answer, p_confirmed)`: weekday `EXTRACT(DOW FROM NOW() AT TIME ZONE venue.timezone)` (Invariant #1); chọn quest theo input (answer→code_entry / confirmed→physical_action) + `active_weekdays @> to_jsonb(dow)`; `code_entry` verify `crypt(lower(btrim(answer)),hash)=hash` (pgcrypto bcrypt — không lộ đáp án); `physical_action`=confirmed; valid→UPDATE sub_quest_passed+response. Idempotent (đã pass→valid). `SET search_path=public,extensions`. `CREATE OR REPLACE`. **CHƯA apply lên Supabase**.
+- `actions/validateSubQuest.ts` — TẠO (`"use server"`): `validateSubQuest(sessionId, {answer?|confirmed?})` → validate UUID → venue_id env → RPC → map: pass→`{ok:true,valid:true}`, mã sai→`{ok:true,valid:false}` (thử lại), lỗi cứng→`{ok:false,error}`.
+- `test/validateSubQuest.test.ts` — TẠO: 1 offline guard + 1 live (probe-skip; code sai→đúng(trim)→idempotent + physical_action; token `0c..`/`0d..` tự dọn `finally`).
+- `supabase/tests/validate_sub_quest_test.sql` — TẠO: 8 nhánh SQL (physical, code đúng/normalize/sai, idempotent, not-running, not-found, no-quest-today).
+
+**Test results:**
+- `npm test` → ✅ **32 PASS / 0 FAIL / 1 SKIP** (skip = live validate_sub_quest, chưa apply Supabase). Offline guard PASS.
+- `npx tsc --noEmit` → ✅ 0 (sau fix `row?.field` null-guard) · `npm run lint` → ✅ clean · `npm run build` → ✅.
+- **Docker SQL (Postgres 16 isolated):** `validate_sub_quest` **8/8 PASS** (bcrypt verify "1234"/normalize/sai qua pgcrypto chạy thật) + `get_session_status` **6/6 PASS** (Session 8 viết nhưng chưa từng chạy Docker → nay đóng nốt).
+
+**Quyết định kỹ thuật (ADR):**
+- **Verify bcrypt bằng pgcrypto trong RPC (KHÔNG dep node bcryptjs).** Hash seed `$2a$` (pgcrypto) → `crypt(input,hash)=hash` verify ngay SQL → gói weekday+select+verify+update thành 1 RPC atomic (Inv #1/#2), khỏi thêm dependency. `SET search_path=public,extensions` để crypt resolve cả Docker (public) lẫn Supabase (extensions); schema không tồn tại trong path bị bỏ qua (an toàn).
+- **Disambiguate quest theo INPUT** (answer→code_entry, confirmed→physical_action) thay vì quest_id — khớp signature spec. Giả định ≤1 quest mỗi loại active/ngày (`LIMIT 1`).
+- **Chuẩn hoá `lower(btrim(answer))`** trước verify (khớp cách hash seed). Đáp án KHÔNG rời server.
+- **Mã sai = `{ok:true, valid:false}`** (thử lại được); NO_QUEST_TODAY/SESSION_NOT_RUNNING = lỗi cứng `{ok:false}`.
+- **Gate `status=RUNNING`** (ngoài spec literal) → không pass quest trên phiên EXPIRED/COMPLETED. Idempotent đã-pass→valid (không re-verify).
+
+**Vấn đề gặp phải (để session sau không vấp):**
+- **tsc:** `.single()` trả `data: T|null` → `row.field` lỗi TS18047 → fix `row?.field` trong assert. (Pattern y hệt sessionStatus.test.ts Session 8 lại không lỗi — cứ `?.` cho chắc.)
+- **Docker máy nay CHẠY** → test SQL isolated (mạnh hơn live-skip). Cách: `docker run -d --name opr-pg -e POSTGRES_PASSWORD=postgres postgres:16-alpine` → `docker cp file opr-pg:/tmp/` → `docker exec opr-pg psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/x.sql`. **PowerShell KHÔNG hỗ trợ `< file` redirect → PHẢI `docker cp`+`-f`, đừng `< file`.** ON_ERROR_STOP=1 → exit≠0 nếu bất kỳ RAISE EXCEPTION.
+- **Live test SKIP** vì validate_sub_quest chưa apply Supabase. **Đóng:** user chạy `schema.sql` SQL Editor → `npm test` → **33/0/0**. Hàm đã proven Docker 8/8 → rủi ro thấp.
+- T2-2 + T2-7 **chưa commit/push** (push đã hoạt động). Commit: `supabase/ actions/validateSubQuest.ts test/validateSubQuest.test.ts app/session/ app/_components/ lib/ test/ docs/`.
+
+**Task tiếp theo:** T2-3 — Phase 2 UI Offline Quest (Blind Box) (deps T2-2 ✓ + T2-7 ✓)
+**Bước tiếp theo:** Thay placeholder Phase 2 ở `SessionView` bằng Blind Box thật — render quest từ `sub_quest_config`; `code_entry` ô nhập → `validateSubQuest({answer})`; `physical_action` nút → `validateSubQuest({confirmed:true})`; `vibrate([200,100,200])` + visual border pulse (Inv #4) + beep; `sub_quest_passed=true` → khoá. Cần truyền `sub_quest_config` xuống client (page fetch hoặc API).
+
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)
 ═══════════════════════════════════════════════
@@ -348,4 +380,4 @@ MVP tiến độ  : 8 / 25 tasks hoàn thành
 | ✅ D-014 | Live-connect test skip vì chưa có Supabase creds | — | **ĐÓNG (Session 4):** `.env.local` đủ creds + URL sửa + `--env-file-if-exists` → `npm test` **6 PASS, 0 SKIP** |
 | ✅ D-015 | Schema/seed chưa apply lên Supabase thật (mới chỉ Docker) | — | **ĐÓNG (Session 4):** user chạy SQL Editor `schema.sql`+`seed.sql`; `verify:supabase` xác nhận venue + 20 voucher + RPC live |
 | ✅ D-016 | Corporate TLS proxy → Node fetch `SELF_SIGNED_CERT_IN_CHAIN` (fetch failed) | Local-only (Vercel/Linux không bị) | **ĐÓNG (Session 4):** `--use-system-ca` trong scripts (Node 22.15+). Mọi script Node gọi mạng TRÊN MÁY NÀY cần flag này |
-| D-017 | User chưa push code mới lên GitHub được (nghi corporate firewall/proxy chặn git push) | TB — block verify auto-deploy + push T1+. KHÔNG block Vercel deploy bản hiện tại (code đã ở main `9ecb25e`) | Chẩn đoán khi user sẵn sàng: git qua HTTPS proxy? đổi remote sang SSH? credential/PAT? |
+| ✅ D-017 | Push GitHub "bị chặn" (Session 4 NGHI corporate firewall) | — | **ĐÓNG (Session 10):** chẩn đoán lại — KHÔNG phải firewall/TLS. `git ls-remote` + `push --dry-run` đều exit 0; remote HTTPS, `credential.helper=manager` (GCM) có creds. User push thật → remote ở `6178af7`. Push hoạt động bình thường; kẹt Session 4 chỉ là GCM chưa auth lần đầu. |
