@@ -7,13 +7,13 @@
 
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
-| Phase 0: Setup | 4 | 3 | 75% |
+| Phase 0: Setup | 4 | 4 | 100% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 3 | 43% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 6 | 86% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **9** | **36%** |
+| **Tổng MVP (🟢)** | **25** | **13** | **52%** |
 
 ---
 
@@ -51,14 +51,14 @@
 - [x] Seed 20 vouchers `OPR-XXXX-XXXX` status='AVAILABLE' (deterministic md5)
 - [x] Schema apply ~~vào Supabase dashboard~~ — *validate tương đương trên **Postgres 16 (Docker)**; apply lên Supabase thật defer sang T0-4 (cần project/creds). Xem D-015.*
 
-### [ ] T0-4: Vercel deployment 🔄
+### [x] T0-4: Vercel deployment ✅ (Session 11)
 **Deps:** T0-1
 **Context:** Link project Vercel, set env vars, confirm auto-deploy từ main branch.
-**Trạng thái (Session 4):** Nửa Supabase/local ✅ verified — schema/seed đã apply lên Supabase THẬT, `verify:supabase` xanh (venue + 20 voucher + RPC), `npm test` 6 PASS/0 SKIP, `npm run build` exit 0 → **đóng D-014 + D-015**. Nửa Vercel **DEFERRED** (user tạm chưa push/deploy được). Chi tiết: HISTORY Session 4.
+**Trạng thái:** Nửa Supabase/local ✅ (Session 4, đóng D-014/D-015). Nửa Vercel ✅ (Session 11) — LIVE tại `off-phone-reward-6t79.vercel.app`, verify curl prod đầy đủ.
 **Checklist:**
-- [ ] Project live trên Vercel URL
-- [ ] Env vars set trong Vercel dashboard (5 biến; URL = `https://lcpfzkjovvnihfueewix.supabase.co` KHÔNG `/rest/v1/`)
-- [ ] Auto-deploy từ git push main hoạt động
+- [x] Project live trên Vercel URL — `https://off-phone-reward-6t79.vercel.app` (`/` → 200 + branding `#0F766E`/`#F59E0B`)
+- [x] Env vars set trong Vercel dashboard (5 biến) — verify `/api/session-status?id=<uuid>` → **404 SESSION_NOT_FOUND** (env+RPC live, KHÔNG 500)
+- [x] Auto-deploy từ git push main — code đã push (`/session` T2-2 + API T2-1) có trên prod
 
 ---
 
@@ -120,34 +120,37 @@
 - [x] Sudoku 9x9 render rõ, border phân chia ô
 - [x] session_id không hợp lệ → redirect landing
 
-### [ ] T2-3: Phase 2 UI — Offline Quest (Blind Box)
+### [x] T2-3: Phase 2 UI — Offline Quest (Blind Box) ✅ (Session 12)
 **Deps:** T2-2, T2-7
 **Context:** Khi phase=2: vibrate + visual fallback + **UI Blind Box thật** (không chỉ card tĩnh). Render quest hôm nay từ `sub_quest_config`, wire vào `validateSubQuest`.
+**Impl:** RPC `get_active_quests` (weekday-SQL + **strip answer_hash**) → action getActiveQuests → `BlindBox.tsx` render code_entry(input)+physical_action(button) → `validateSubQuest` → feedback; passed→khoá Done. Vibrate+beep vào phase 2; visual pulse overlay `animate-pulse` luôn chạy (Inv #4). Mock "1234" cho dev. Docker SQL 3/3 + render mock phase 2 OK.
 **Checklist:**
-- [ ] `navigator.vibrate([200,100,200])` — không crash nếu không support
-- [ ] Visual border pulse luôn chạy (kể cả iOS Safari) + AudioContext beep fallback
-- [ ] `code_entry`: ô nhập mã → gọi validateSubQuest → pass/fail feedback
-- [ ] `physical_action`: nút confirm → gọi validateSubQuest(confirmed=true)
-- [ ] Khi `sub_quest_passed=true`: hiện trạng thái đã hoàn thành, không cho làm lại
-- [ ] Hướng dẫn vật lý: mở Blind Box + Stranger's Notebook
+- [x] `navigator.vibrate([200,100,200])` — không crash nếu không support (guarded `typeof`)
+- [x] Visual border pulse luôn chạy (kể cả iOS Safari) + AudioContext beep fallback (gated Inv #5)
+- [x] `code_entry`: ô nhập mã → gọi validateSubQuest → pass/fail feedback
+- [x] `physical_action`: nút confirm → gọi validateSubQuest(confirmed=true)
+- [x] Khi `sub_quest_passed=true`: hiện trạng thái đã hoàn thành, không cho làm lại
+- [x] Hướng dẫn vật lý: mở Blind Box + Stranger's Notebook ("Sổ Người Lạ")
 
-### [ ] T2-4: Phase 3 UI — Meditation
+### [x] T2-4: Phase 3 UI — Meditation ✅ (Session 13)
 **Deps:** T2-3
 **Context:** Phase 3: fade text, hourglass SVG animated, lo-fi audio gated bởi prior gesture.
+**Impl:** `Meditation.tsx` — Hourglass inline SVG lật chậm CSS `animate-hourglass` + câu thiền fade-cycle `animate-med-fade`. Lo-fi = pad sine procedural (`startAmbient`/`stopAmbient` ở lib/audio, không cần file). Autoplay nếu `isAudioUnlocked()` (gesture START); chưa → nút "Bật nhạc". Render mock=2200 OK.
 **Checklist:**
-- [ ] Text fade-out mượt
-- [ ] Hourglass SVG animate loop (không GIF)
-- [ ] Lo-fi audio chỉ autoplay nếu có prior gesture (ref flag set khi START)
-- [ ] Chưa có gesture → nút "Bật nhạc" thay vì autoplay
+- [x] Text fade-out mượt (`animate-med-fade`, đổi câu mỗi 6s)
+- [x] Hourglass SVG animate loop (không GIF) — inline SVG + CSS keyframe `hourglassFlip`
+- [x] Lo-fi audio chỉ autoplay nếu có prior gesture (`isAudioUnlocked()` — module state, không sessionStorage)
+- [x] Chưa có gesture → nút "Bật nhạc" thay vì autoplay (click = gesture → unlock + phát)
 
-### [ ] T2-5: visibilitychange tracking
+### [x] T2-5: visibilitychange tracking ✅ (Session 14)
 **Deps:** T2-2
 **Context:** `visibilitychange` → POST `/api/log-infraction` → INCREMENT infraction_count.
+**Impl:** RPC `log_infraction` (`UPDATE infraction_count+1 WHERE RUNNING RETURNING`, atomic Inv #2; non-RUNNING→-1) + route `POST /api/log-infraction` + SessionView listener (hidden→fetch keepalive→set count) + banner đỏ ≥3. Docker SQL 3/3, curl POST 400 OK.
 **Checklist:**
-- [ ] Listener đăng ký khi mount, cleanup khi unmount
-- [ ] POST thực sự INCREMENT trong DB
-- [ ] Warning banner sau 3 vi phạm
-- [ ] MVP: không auto-fail session
+- [x] Listener đăng ký khi mount, cleanup khi unmount (`addEventListener`/`removeEventListener`)
+- [x] POST thực sự INCREMENT trong DB (RPC atomic — Docker 3/3 + live-ready)
+- [x] Warning banner sau 3 vi phạm (`infractions >= 3` → banner fixed-top)
+- [x] MVP: không auto-fail session (chỉ đếm để cảnh báo)
 
 ### [ ] T2-6: Clock sync
 **Deps:** T2-1, T2-2

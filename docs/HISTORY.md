@@ -6,12 +6,12 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-04 (Session 10 — T2-7 validateSubQuest ✅; npm test 32/0/1-skip, Docker SQL validate_sub_quest 8/8 + get_session_status 6/6 PASS, build OK)
-Task đang làm: T2-3 — Phase 2 UI Offline Quest (Blind Box) (deps T2-2 ✓ + T2-7 ✓ — buildable)
-Bước tiếp theo: Thay placeholder Phase 2 ở `app/_components/SessionView.tsx` bằng Blind Box THẬT — render quest hôm nay từ `venue.sub_quest_config`; `code_entry`: ô nhập mã → `validateSubQuest(sid,{answer})` → pass/fail feedback; `physical_action`: nút confirm → `validateSubQuest(sid,{confirmed:true})`; khi `sub_quest_passed=true` → trạng thái hoàn thành (khoá, không cho làm lại); `navigator.vibrate([200,100,200])` + visual border pulse (Invariant #4 iOS fallback) + AudioContext beep. Hướng dẫn vật lý: mở Blind Box + Stranger's Notebook.
-Task kế tiếp : T2-4 — Phase 3 Meditation (deps T2-3) HOẶC T2-6 Clock sync (gần xong nhờ T2-2)
-⚠️ Treo: (1) **Apply `supabase/schema.sql`** (thêm `validate_sub_quest`) lên Supabase → live test 33/0/0 (hàm đã proven Docker 8/8); (2) **T0-4 Vercel** — user báo đã làm, CHƯA verify (cần URL); (3) **Commit/push T2-2 + T2-7** (push đã hoạt động — D-017 gỡ).
-MVP tiến độ  : 9 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-04 (Session 14 — T2-5 visibilitychange ✅; npm test 34/0/1-skip, Docker log_infraction 3/3, curl POST 400 OK. **MVP qua 50%**)
+Task đang làm: T2-6 — Clock sync (deps T2-1 ✓ + T2-2 ✓ — buildable; 2/3 checklist đã có nhờ T2-2)
+Bước tiếp theo: `app/_components/SessionView.tsx` — 2 mục đầu đã xong (fetchTime ghi khi nhận response + countdown `serverDelta+(Date.now()-fetchTime)/1000`). Còn: **resync smooth** — khi poll mới về, nếu |serverDelta − displayedDelta| < 5s thì nội suy mượt (ease) thay vì nhảy số; lệch ≥5s thì snap. Tránh countdown giật mỗi 30s.
+Task kế tiếp : T3-1 — CLAIM button logic (deps T2-1 ✓) → mở Phase 3 luồng nhận thưởng
+⚠️ Treo: **Apply `supabase/schema.sql`** (thêm `log_infraction`) → infraction ghi prod + live test 35/0/0. **Commit/push T2-3→T2-5** (chưa lên GitHub từ `932530a`). (✅ T0-4 · ✅ D-017.)
+MVP tiến độ  : 13 / 25 tasks hoàn thành
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -19,13 +19,13 @@ MVP tiến độ  : 9 / 25 tasks hoàn thành
 
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
-| Phase 0: Setup | 4 | 3 | 75% |
+| Phase 0: Setup | 4 | 4 | 100% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 3 | 43% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 6 | 86% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP** | **25** | **9** | **36%** |
+| **Tổng MVP** | **25** | **13** | **52%** |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -352,6 +352,121 @@ MVP tiến độ  : 9 / 25 tasks hoàn thành
 
 **Task tiếp theo:** T2-3 — Phase 2 UI Offline Quest (Blind Box) (deps T2-2 ✓ + T2-7 ✓)
 **Bước tiếp theo:** Thay placeholder Phase 2 ở `SessionView` bằng Blind Box thật — render quest từ `sub_quest_config`; `code_entry` ô nhập → `validateSubQuest({answer})`; `physical_action` nút → `validateSubQuest({confirmed:true})`; `vibrate([200,100,200])` + visual border pulse (Inv #4) + beep; `sub_quest_passed=true` → khoá. Cần truyền `sub_quest_config` xuống client (page fetch hoặc API).
+
+### Session 11 — 2026-06-04 — T0-4 Vercel deployment (hoàn tất) + push T2-7
+**Task:** T0-4 — Vercel deployment (nốt nửa Vercel)  |  **Kết quả:** ✅  (Phase 0 hoàn tất 4/4)
+
+**Bối cảnh:** Nửa Vercel deferred từ Session 4 (cần tài khoản user). User đã set env + deploy; session này push T2-7 + verify deploy LIVE → đóng T0-4.
+
+**Việc:**
+- **Push T2-7** commit `932530a` lên GitHub (`c036465..932530a main -> main`), remote khớp local. (T2-2 user đã tự commit `c036465 update` trước đó, kèm `.claude`/`.mcp.json`.)
+- **Verify deploy Vercel** `https://off-phone-reward-6t79.vercel.app` qua curl prod thật.
+
+**Test results (curl prod):**
+- `/` → ✅ HTTP 200 + đủ copy ("BẮT ĐẦU"/"45 phút"/"giảm 10"/"Gác"/"đăng nhập") + màu branding `#0F766E`/`#F59E0B`.
+- `/api/session-status` no-id → ✅ 400; `?id=<uuid random>` → ✅ **404 `{"error":"SESSION_NOT_FOUND"}`** → chứng minh **5 env biến set đúng + Supabase reachable từ Vercel + RPC `get_session_status` live trên prod** (không 500).
+- `/session` no-id → ✅ 307 redirect; `?id=<uuid>` → ✅ 200 (loading shell).
+
+**Quyết định kỹ thuật:**
+- **T0-4 đóng** — cả 2 nửa (Supabase/local Session 4 + Vercel Session 11). **App pilot LIVE public.** Phase 0 hoàn tất 4/4.
+- Branding prod hiển thị THẬT (SSR-fetch Supabase OK trên Vercel — khác local bị corporate proxy chặn → default).
+- Auto-deploy GitHub→Vercel xác nhận gián tiếp: code đã push (T2-1 API + T2-2 /session) đều có trên prod.
+
+**Vấn đề gặp phải:**
+- Không có. Verify curl.exe + `[Console]::OutputEncoding=UTF8` để match copy tiếng Việt chuẩn.
+- ⚠️ `validate_sub_quest` (T2-7) **chưa apply lên Supabase** → Blind Box (T2-3) gọi sẽ lỗi cho tới khi user re-run `schema.sql` SQL Editor.
+
+**Task tiếp theo:** T2-3 — Phase 2 UI Offline Quest (Blind Box) (deps T2-2 ✓ + T2-7 ✓)
+**Bước tiếp theo:** Blind Box thật vào SessionView (wire `validateSubQuest`) + vibrate/visual/beep. Apply `validate_sub_quest` lên Supabase trước khi test prod.
+
+### Session 12 — 2026-06-04 — T2-3 Phase 2 UI Offline Quest (Blind Box)
+**Task:** T2-3 — Phase 2 UI — Offline Quest (Blind Box)  |  **Kết quả:** ✅
+
+**Files tạo/sửa:**
+- `supabase/schema.sql` — THÊM `get_active_quests(p_venue_id)`: weekday SQL (venue.timezone, Inv #1) filter quest active hôm nay + **STRIP answer_hash** → JSONB (chỉ id/type/title/description/hint/confirm_button). Venue không có → `[]`. `WITH ORDINALITY` giữ thứ tự. **CHƯA apply Supabase**.
+- `lib/quests.ts` — TẠO (pure, client-safe): type `ActiveQuest` (KHÔNG answer_hash) + `MOCK_QUESTS` (khớp seed) cho dev.
+- `actions/getActiveQuests.ts` — TẠO (`"use server"`): RPC get_active_quests, venue_id env → `ActiveQuest[]`. Lỗi/chưa-apply → `[]`.
+- `lib/audio.ts` — THÊM `playBeep()`: oscillator ngắn, CHỈ kêu nếu audio unlocked ở START (Inv #5).
+- `app/_components/BlindBox.tsx` — TẠO (`"use client"`): render quest (code_entry input+Gửi / physical_action button), `onValidate` → feedback (sai→"thử lại"); passed→khoá (Done). Visual pulse overlay `animate-pulse` LUÔN chạy (Inv #4). Guidance "Mở Blind Box + đọc Sổ Người Lạ".
+- `app/_components/SessionView.tsx` — SỬA: phase 2 → `<BlindBox>`; vào phase 2 → `navigator.vibrate([200,100,200])` + `playBeep()` (1 lần, flag `beeped`); fetch getActiveQuests khi phase 2 (real) / MOCK_QUESTS (dev); `handleValidate` (real validateSubQuest / mock "1234"); `passed = status.sub_quest_passed || localPassed`. Mock subQuestPassed=false (đổi từ T2-2) để test Blind Box.
+- `supabase/tests/get_active_quests_test.sql` — TẠO: 3 nhánh (2 quest no-answer_hash + đủ 2 loại, venue not-found→[], weekday-filter loại quest ngày khác).
+- `test/getActiveQuests.test.ts` — TẠO: live (probe-skip) xác nhận trả quest + KHÔNG lộ answer_hash.
+
+**Test results:**
+- `npm test` → ✅ **32 PASS / 0 FAIL / 2 SKIP** (validate_sub_quest + get_active_quests live — chưa apply Supabase).
+- tsc 0 · lint clean · `npm run build` ✅ (`/session` 3.82 kB).
+- **Docker SQL `get_active_quests` 3/3 PASS** (2 quest + KHÔNG lộ answer_hash + weekday-filter ngày khác bị loại).
+- **Render thật (next dev mock=1500, Phase 2):** "Mở Blind Box"/"Đứng dậy vươn vai"/"Sổ Người Lạ"/"Gửi"/"Đã xong"/`animate-pulse` đều OK; 1 input + 2 button. HTTP 200.
+
+**Quyết định kỹ thuật (ADR):**
+- **RPC `get_active_quests` riêng cho DISPLAY** (tách khỏi validateSubQuest = VALIDATE). Weekday filter + strip answer_hash trong SQL (Inv #1 + bảo mật đáp án — client chỉ nhận field hiển thị).
+- **Fetch quest LAZY khi phase=2** (client gọi server action) thay vì page.tsx await mỗi load → không thêm latency cho phase 1.
+- **BlindBox inject `onValidate`** → tách data/validation khỏi UI → mock được (dev "1234") + dùng lại real. `passed = server || localPassed` (optimistic UX, poll xác nhận sau).
+- **Visual pulse = overlay div `animate-pulse`** (Tailwind built-in, không cần keyframe globals.css). Luôn chạy → fallback iOS khi vibrate fail (Inv #4). Beep gated unlock (Inv #5).
+
+**Vấn đề gặp phải:**
+- Không có lỗi. Docker chạy → SQL test isolated 3/3.
+- ⚠️ Phase 2 Blind Box cần CẢ `validate_sub_quest` (T2-7) + `get_active_quests` (T2-3) apply Supabase mới chạy prod. User re-run `schema.sql` (idempotent) — thiếu thì getActiveQuests trả [] + validate trả SERVER_ERROR.
+- T2-3 files **chưa commit** (commit: `supabase/ actions/getActiveQuests.ts lib/quests.ts lib/audio.ts app/_components/ test/getActiveQuests.test.ts docs/`).
+
+**Task tiếp theo:** T2-4 — Phase 3 UI Meditation (deps T2-3 ✓)
+**Bước tiếp theo:** Thay placeholder Phase 3 ở SessionView bằng Meditation — text fade-out; hourglass SVG animate (không GIF); lo-fi audio gated bởi `audio_gesture` (sessionStorage set ở START, Inv #5); chưa gesture → nút "Bật nhạc".
+
+### Session 13 — 2026-06-04 — T2-4 Phase 3 UI Meditation
+**Task:** T2-4 — Phase 3 UI — Meditation  |  **Kết quả:** ✅  (3 pha focus UI hoàn tất: Sudoku → Blind Box → Thiền)
+
+**Bối cảnh:** User đã apply `schema.sql` (validate_sub_quest + get_active_quests) → 2 live test giờ PASS → `npm test` **34/0/0** (đóng 2 skip Session 12). Phase 2 Blind Box chạy được trên prod.
+
+**Files tạo/sửa:**
+- `app/_components/Meditation.tsx` — TẠO (`"use client"`): Hourglass inline SVG lật chậm CSS `animate-hourglass` (KHÔNG GIF) + câu thiền fade-cycle 6s (`animate-med-fade`, remount `key`). Audio: `isAudioUnlocked()` (gesture START còn sống qua client-nav) → autoplay `startAmbient()`; chưa unlock → nút "Bật nhạc" (click=gesture → unlock+phát). `stopAmbient()` khi unmount.
+- `lib/audio.ts` — THÊM `startAmbient()`/`stopAmbient()`: pad sine 3 nốt (A2/E3/A3) volume 0.05, procedural (KHÔNG cần file asset). CHỈ chạy nếu unlocked (Inv #5). Idempotent.
+- `app/globals.css` — THÊM keyframes `medFade` (text fade) + `hourglassFlip` (lật 360° loop vô hạn).
+- `app/_components/SessionView.tsx` — SỬA: phase 3 placeholder → `<Meditation />` (+ import).
+
+**Test results:**
+- `npm test` → ✅ **34 PASS / 0 FAIL / 0 SKIP** (validate_sub_quest + get_active_quests live giờ PASS — user đã apply schema). tsc 0 · lint clean · build ✅ (`/session` 4.52 kB).
+- **Render thật (next dev mock=2200, Phase 3):** "Pha 3 · Thiền" + "Hít thở…" + `animate-hourglass`/`animate-med-fade` + `<svg>`/`<path>` đều OK. HTTP 200.
+
+**Quyết định kỹ thuật (ADR):**
+- **Lo-fi audio = pad sine procedural** (Web Audio, không file asset) → đỡ thêm binary; đổi sang asset lo-fi thật trước pilot nếu muốn. Volume 0.05 rất nhẹ.
+- **Autoplay theo `isAudioUnlocked()` (module state), KHÔNG `sessionStorage.audio_gesture`.** Sau reload/mở thẳng, module `unlocked` reset → browser CHẶN autoplay (cần gesture mới) → đúng phải hiện nút. sessionStorage chỉ nói "đã từng gesture" nhưng KHÔNG đủ qua autoplay policy. Module `unlocked` (context còn sống qua client-nav từ START) mới là tín hiệu đáng tin (Inv #5). → **Đính chính** ghi chú Session 7 ("dùng sessionStorage.audio_gesture cho T2-4").
+- **Hourglass = inline SVG + CSS keyframe**, text fade qua `animate-med-fade` + remount `key` mỗi câu — KHÔNG GIF, không asset.
+- **SSR-safe:** audio block init `audioOn=false/needGesture=false` → render `null` tới khi mount (effect mới quyết) → tránh SSR hiện nhầm "đang phát", không hydration mismatch.
+
+**Vấn đề gặp phải:**
+- Không có lỗi. Task visual+audio → verify qua build + render (không có pure logic để unit test → không thêm test file; suite giữ 34/0/0).
+- Nút audio client-only (sau hydration) → curl SSR không thấy; verify bằng build + reasoning (đúng pattern client app).
+
+**Task tiếp theo:** T2-5 — visibilitychange tracking (deps T2-2 ✓)
+**Bước tiếp theo:** SessionView thêm listener `visibilitychange` (mount/cleanup) → `document.hidden` → POST `/api/log-infraction` (route mới) → INCREMENT `focus_sessions.infraction_count`; banner cảnh báo sau 3 lần; MVP KHÔNG auto-fail.
+
+### Session 14 — 2026-06-04 — T2-5 visibilitychange tracking
+**Task:** T2-5 — visibilitychange tracking  |  **Kết quả:** ✅  (MVP qua mốc 50% — 13/25)
+
+**Files tạo/sửa:**
+- `supabase/schema.sql` — THÊM `log_infraction(p_session_id)`: `UPDATE infraction_count=infraction_count+1 WHERE id=$1 AND status='RUNNING' RETURNING` (atomic row-lock — Inv #2, không lost-update khi rời/về nhiều lần); non-RUNNING/not-found → `COALESCE(...,-1)`. **CHƯA apply Supabase**.
+- `app/api/log-infraction/route.ts` — TẠO (POST, `force-dynamic`): body `{id}` (fallback `?id=`) → validate UUID (400) → RPC log_infraction → `{infraction_count}` + `no-store`. 500 khi lỗi.
+- `app/_components/SessionView.tsx` — SỬA: state `infractions`; effect listener `visibilitychange` (chỉ khi `visibilityState==='hidden'` → `fetch POST keepalive` → set count; mock KHÔNG log); banner đỏ `fixed top` khi count ≥3. Đăng ký mount / cleanup unmount.
+- `supabase/tests/log_infraction_test.sql` — TẠO: 3 nhánh (increment 1→2 + ghi DB, EXPIRED→-1 không tăng, not-found→-1).
+- `test/logInfraction.test.ts` — TẠO: live (probe-skip) increment 1→2 + DB + not-found→-1 (token `0e..` tự dọn).
+
+**Test results:**
+- `npm test` → ✅ **34 PASS / 0 FAIL / 1 SKIP** (skip = log_infraction live, chưa apply). tsc 0 · lint clean · build ✅ (route `/api/log-infraction` = ƒ).
+- **Docker SQL `log_infraction` 3/3 PASS** (increment atomic + RUNNING-gate giữ 0 + not-found→-1).
+- **curl POST:** no-body & bad-id → **400** `{"error":"INVALID_SESSION_ID"}`.
+
+**Quyết định kỹ thuật (ADR):**
+- **Increment qua RPC `UPDATE col=col+1`** (atomic row-lock, Inv #2) — supabase-js `.update()` KHÔNG biểu diễn được `col+1` (chỉ literal) → bắt buộc RPC. Gate `status='RUNNING'` (vi phạm chỉ tính khi đang chạy); non-RUNNING → -1 (route coi no-op).
+- **fetch `keepalive:true`** (KHÔNG sendBeacon) → POST gửi được cả khi tab vừa ẩn, NHƯNG vẫn đọc được response (count) → cập nhật banner khi user quay lại tab. sendBeacon thì mất response.
+- **Banner dùng count từ response (DB-accurate)**; reload reset banner tới infraction kế (MVP chấp nhận — không thêm field vào session-status). MVP **KHÔNG auto-fail** (chỉ đếm + cảnh báo).
+- Mock không log (cần session thật) → banner verify bằng build+logic; route 400 curl + RPC qua Docker/live.
+
+**Vấn đề gặp phải:**
+- ⚠️ `log_infraction` chưa apply Supabase → live test skip + infraction trên prod chưa ghi tới khi user re-run `schema.sql`.
+- T2-3/T2-4/T2-5 (+docs) **chưa commit/push** từ sau `932530a`.
+
+**Task tiếp theo:** T2-6 — Clock sync (deps T2-1 ✓ + T2-2 ✓)
+**Bước tiếp theo:** 2/3 checklist đã có nhờ T2-2 (fetchTime + computeLiveDelta). Còn **resync smooth**: poll mới về, |serverDelta − displayedDelta| < 5s → nội suy mượt thay vì nhảy; ≥5s → snap. (Tránh countdown giật mỗi 30s.)
 
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)

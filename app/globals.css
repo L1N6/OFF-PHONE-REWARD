@@ -25,3 +25,23 @@ body {
     text-wrap: balance;
   }
 }
+
+/* ---- T2-4 Meditation (Phase 3) — animation thuần CSS, KHÔNG GIF ---- */
+@keyframes medFade {
+  0% { opacity: 0; transform: translateY(4px); }
+  15%, 80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+.animate-med-fade {
+  animation: medFade 6s ease-in-out;
+}
+
+@keyframes hourglassFlip {
+  0%, 42% { transform: rotate(0deg); }
+  50%, 92% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+.animate-hourglass {
+  animation: hourglassFlip 6s ease-in-out infinite;
+  transform-origin: center;
+}

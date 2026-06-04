@@ -380,3 +380,65 @@ BEGIN
 
     RETURN QUERY SELECT TRUE, NULL::TEXT;
 END $$;
+
+-- =====================================================================
+-- get_active_quests(p_venue_id)  🟢  — specs.md §3 (hiển thị Blind Box T2-3)
+--   Trả quest active HÔM NAY (weekday `EXTRACT(DOW FROM NOW() AT TIME ZONE venue.timezone)`
+--   — Invariant #1) dưới dạng JSONB array, ĐÃ STRIP `answer_hash` (đáp án KHÔNG rời server,
+--   chỉ field hiển thị: id/type/title/description/hint/confirm_button). Venue không có → [].
+--   Giữ thứ tự quest trong config (WITH ORDINALITY).
+-- =====================================================================
+CREATE OR REPLACE FUNCTION get_active_quests(p_venue_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_tz     TEXT;
+    v_config JSONB;
+    v_dow    INT;
+    v_result JSONB;
+BEGIN
+    SELECT timezone, sub_quest_config INTO v_tz, v_config
+        FROM venues WHERE id = p_venue_id;
+    IF NOT FOUND THEN
+        RETURN '[]'::jsonb;
+    END IF;
+
+    v_dow := EXTRACT(DOW FROM (NOW() AT TIME ZONE v_tz))::INT;
+
+    SELECT COALESCE(jsonb_agg(
+        jsonb_build_object(
+            'id',             q->>'id',
+            'type',           q->>'type',
+            'title',          q->'content'->>'title',
+            'description',    q->'content'->>'description',
+            'hint',           q->'content'->>'hint',
+            'confirm_button', q->'content'->>'confirm_button'
+        ) ORDER BY ord
+    ), '[]'::jsonb) INTO v_result
+    FROM jsonb_array_elements(COALESCE(v_config->'quests', '[]'::jsonb))
+         WITH ORDINALITY AS t(q, ord)
+    WHERE (q->'active_weekdays') @> to_jsonb(v_dow);
+
+    RETURN v_result;
+END $$;
+
+-- =====================================================================
+-- log_infraction(p_session_id)  🟢  — specs.md §4 Module 2 (visibilitychange)
+--   INCREMENT infraction_count nguyên tử (UPDATE col=col+1 dưới row-lock — Invariant #2,
+--   không lost-update khi rời/về màn hình nhiều lần). CHỈ phiên RUNNING (vi phạm chỉ tính
+--   khi đang chạy). Trả count mới; KHÔNG RUNNING / không tồn tại → -1 (route coi như no-op).
+--   MVP: KHÔNG auto-fail — chỉ đếm để cảnh báo (banner sau 3).
+-- =====================================================================
+CREATE OR REPLACE FUNCTION log_infraction(p_session_id UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    UPDATE focus_sessions
+       SET infraction_count = infraction_count + 1
+     WHERE id = p_session_id AND status = 'RUNNING'
+    RETURNING infraction_count INTO v_count;
+
+    RETURN COALESCE(v_count, -1);
+END $$;
