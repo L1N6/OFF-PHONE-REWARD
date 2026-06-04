@@ -6,12 +6,12 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-04 (Session 8 — T2-1 Session status API ✅; npm test 24/0/1-skip, build route ƒ, curl 400 OK)
-Task đang làm: T2-2 — Session page + Phase 1 UI (deps T2-1 ✓ — buildable, MOCK-FIRST)
-Bước tiếp theo: `app/session/page.tsx` — đọc `id` từ URL → poll `/api/session-status?id=` mỗi 30s; countdown = `serverDelta + (Date.now()-fetchTime)/1000` (chỉ để HIỂN THỊ; KHÔNG quyết phase bằng Date.now()); Phase 1 render Sudoku 9x9 tĩnh (hardcode 1 puzzle hợp lệ); `id` không hợp lệ → redirect landing. MOCK-FIRST (Invariant #7) rồi wire API thật.
-Task kế tiếp : T2-7 — validateSubQuest (deps T0-3 ✓) — làm song song được
-⚠️ Treo: (1) **Apply `supabase/schema.sql` lên Supabase** (thêm `get_session_status`) qua SQL Editor → live RPC test xanh (25/0/0); (2) T0-4 nửa Vercel (🔄 deferred — cần user); (3) D-017 git push blocked. Chi tiết Session 4/8.
-MVP tiến độ  : 7 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-04 (Session 9 — T2-2 Session page + Phase 1 UI ✅; npm test 31/0/0, build route ƒ, render mọi phase + redirect 307 OK)
+Task đang làm: T2-7 — validateSubQuest Server Action (deps T0-3 ✓ — buildable; unblock T2-3 Blind Box)
+Bước tiếp theo: `actions/validateSubQuest.ts` (specs §3) — chọn quest theo weekday SQL `EXTRACT(DOW FROM NOW() AT TIME ZONE venue.timezone)` match `active_weekdays`; `code_entry` → so khớp `crypt(answer.trim().lower(), hash)=hash` (pgcrypto SQL, KHÔNG lộ đáp án) hoặc `bcryptjs`; `physical_action` → `confirmed===true`; valid → UPDATE sub_quest_passed=TRUE + sub_quest_response. Gói RPC (weekday+verify+update atomic — Invariant #1/#2). ĐỀ XUẤT: RPC pgcrypto để khỏi thêm dep node bcrypt.
+Task kế tiếp : T2-3 — Blind Box UI (deps T2-2 ✓ + T2-7) HOẶC T2-6 Clock sync (2 mục đầu đã có nhờ T2-2)
+⚠️ Treo: (1) T0-4 nửa Vercel (🔄 deferred — cần user); (2) D-017 git push blocked. — ✅ Apply schema ĐÃ XONG (user chạy SQL Editor → live `get_session_status` test PASS, 31/0/0).
+MVP tiến độ  : 8 / 25 tasks hoàn thành
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -21,11 +21,11 @@ MVP tiến độ  : 7 / 25 tasks hoàn thành
 |---|---|---|---|
 | Phase 0: Setup | 4 | 3 | 75% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 1 | 14% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 2 | 29% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP** | **25** | **7** | **28%** |
+| **Tổng MVP** | **25** | **8** | **32%** |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -285,6 +285,41 @@ MVP tiến độ  : 7 / 25 tasks hoàn thành
 
 **Task tiếp theo:** T2-2 — Session page + Phase 1 UI (deps T2-1 ✓)
 **Bước tiếp theo:** `app/session/page.tsx` — poll `/api/session-status?id=` mỗi 30s + countdown local (`serverDelta + (Date.now()-fetchTime)/1000`, chỉ hiển thị); Phase 1 Sudoku 9x9 tĩnh; `id` sai → redirect landing. MOCK-FIRST (Invariant #7) trước, wire API sau.
+
+### Session 9 — 2026-06-04 — T2-2 Session page + Phase 1 UI
+**Task:** T2-2 — Session page + Phase 1 UI  |  **Kết quả:** ✅
+
+**Bối cảnh:** User đã apply `schema.sql` lên Supabase giữa 2 session → live `get_session_status` test giờ PASS (đóng skip Session 8). Commit T2-1 `6178af7` đã có local (push vẫn treo D-017).
+
+**Files tạo/sửa:**
+- `app/session/page.tsx` — TẠO (Server, `force-dynamic`): đọc `searchParams.id` → `isValidUuid` sai/thiếu → `redirect('/')`. Mock dev (`?mock=<delta>`, chỉ NODE_ENV≠production) → truyền `mockDelta`. Render `<SessionView>`.
+- `app/_components/SessionView.tsx` — TẠO (`"use client"`): poll `/api/session-status?id=` mỗi 30s (`cache:no-store`) + tick 1s; PHASE do server quyết (Invariant #1). 404/400 → `router.replace('/')`; lỗi mạng → giữ poll. Countdown = `computeLiveDelta` (display-only), gate `mounted` chống hydration mismatch. COMPLETED/EXPIRED có màn riêng; phase 2/3/CLAIMABLE = placeholder. Mock dựng status TRONG render → SSR verify được.
+- `app/_components/Sudoku.tsx` — TẠO: lưới 9×9 tĩnh (81 ô, border dày biên 3×3). Presentational thuần.
+- `lib/sudoku.ts` — TẠO (pure): `SAMPLE_SUDOKU` (puzzle hợp lệ kinh điển) + `isValidSudoku` (check trùng hàng/cột/ô 3×3).
+- `lib/sessionStatus.ts` — THÊM `computeLiveDelta(serverDelta, fetchTimeMs, nowMs)` + `formatMMSS` (pure, display-only).
+- `test/sudoku.test.ts` — TẠO: 4 test (9×9, hợp lệ, bắt lỗi trùng hàng + trùng ô 3×3).
+- `test/sessionStatus.test.ts` — THÊM 2 test (computeLiveDelta + formatMMSS).
+
+**Test results:**
+- `npm test` → ✅ **31 PASS / 0 FAIL / 0 SKIP** — gồm **live `get_session_status` giờ PASS** (user đã apply schema; 404 + phiên mới RUNNING + lazy-expiry ghi DB thật trên Supabase).
+- `npx tsc --noEmit` → ✅ 0 lỗi · `npm run lint` → ✅ clean · `npm run build` → ✅ route `/session` = `ƒ` (2.06 kB).
+- **Render thật (`next dev` + mock):** phase1 `mock=120`→"Pha 1" + **Sudoku 81 ô**; phase2 `mock=1500`→"Pha 2"; claimable `mock=2750`→"Giờ Vàng"; expired `mock=3000`→"hết hạn" — tất cả HTTP 200. Redirect no-id & bad-id → **HTTP 307** về landing.
+
+**Quyết định kỹ thuật (ADR):**
+- **Phase do SERVER quyết, Date.now() chỉ cho countdown DISPLAY** (Invariant #1). `status.phase` từ poll; `computeLiveDelta` (pure, nhận `nowMs` tham số) chỉ hiển thị đồng hồ mượt giữa 2 poll. Resync `fetchTime` mỗi poll.
+- **Mock dev `?mock=<delta>` tính status THẲNG trong render** (không qua state/effect) → SSR hiển thị → verify offline mọi phase không cần live session (MOCK-FIRST #7). Gate `NODE_ENV≠production` → vô hại prod.
+- **Gate `mounted` cho countdown** (render "--:--" tới khi mount) → tránh hydration mismatch (server/client lệch Date.now()).
+- **Tách Server page / Client SessionView** (như T1-3): validate+redirect server-side (không flash content); tương tác client.
+- **Logic thuần tách `lib/`** (computeLiveDelta/formatMMSS/isValidSudoku) → test offline; React wiring verify qua build + render thật.
+- **Phase 2/3/CLAIMABLE = placeholder** (không crash, sẵn cho T2-3/T2-4/T3-1 ráp vào).
+
+**Vấn đề gặp phải (để session sau không vấp):**
+- **Mock chỉ chạy `next dev`** (NODE_ENV=development); `next start`/Vercel (production) bỏ qua mock → poll API thật. Verify UI offline phải `npm run dev`.
+- Local `next dev`/`start` KHÔNG `--use-system-ca` → SSR-fetch Supabase fail (cert) nhưng SessionView poll ở CLIENT (browser, không qua proxy Node) nên prod/Vercel OK; local verify dùng mock.
+- File T2-2 mới **chưa commit** (push D-017). Commit: `app/session/ app/_components/SessionView.tsx app/_components/Sudoku.tsx lib/sudoku.ts lib/sessionStatus.ts test/sudoku.test.ts test/sessionStatus.test.ts docs/`.
+
+**Task tiếp theo:** T2-7 — validateSubQuest Server Action (deps T0-3 ✓)
+**Bước tiếp theo:** `actions/validateSubQuest.ts` (specs §3) — weekday SQL theo `venue.timezone`; `code_entry` verify hash (pgcrypto `crypt()` trong RPC, không lộ đáp án); `physical_action` confirmed; valid → UPDATE sub_quest_passed. Gói RPC atomic. ĐỀ XUẤT: pgcrypto trong SQL để khỏi thêm dep node bcrypt.
 
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   derivePhase,
   deriveSessionStatus,
+  computeLiveDelta,
+  formatMMSS,
   CLAIM_OPEN,
   CLAIM_CLOSE,
 } from "../lib/sessionStatus";
@@ -61,6 +63,21 @@ test("deriveSessionStatus: quá 48' → EXPIRED, claim đóng + expired=true", (
   assert.equal(s.phase, "EXPIRED");
   assert.equal(s.claim_window_open, false);
   assert.equal(s.claim_window_expired, true);
+});
+
+test("computeLiveDelta: cộng thời gian trôi kể từ fetch (giây)", () => {
+  assert.equal(computeLiveDelta(1000, 5000, 8000), 1003); // +3s
+  assert.equal(computeLiveDelta(1000, 5000, 5000), 1000); // vừa fetch
+  assert.equal(computeLiveDelta(0, 10000, 10500), 0.5); // nửa giây
+});
+
+test("formatMMSS: MM:SS zero-pad, clamp âm về 00:00", () => {
+  assert.equal(formatMMSS(0), "00:00");
+  assert.equal(formatMMSS(5), "00:05");
+  assert.equal(formatMMSS(65), "01:05");
+  assert.equal(formatMMSS(CLAIM_OPEN), "45:00"); // mốc Giờ Vàng
+  assert.equal(formatMMSS(CLAIM_CLOSE), "48:00");
+  assert.equal(formatMMSS(-5), "00:00"); // âm (đã quá mốc) → 00:00
 });
 
 // =====================================================================

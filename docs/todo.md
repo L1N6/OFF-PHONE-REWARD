@@ -9,11 +9,11 @@
 |---|---|---|---|
 | Phase 0: Setup | 4 | 3 | 75% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 1 | 14% |
+| Phase 2: Timer, Phases & Blind Box | 7 | 2 | 29% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **7** | **28%** |
+| **Tổng MVP (🟢)** | **25** | **8** | **32%** |
 
 ---
 
@@ -110,14 +110,15 @@
 - [x] Return: `{ delta_seconds, phase, status, sub_quest_passed, claim_window_open, claim_window_expired }`
 - [x] 404 nếu session_id không tồn tại
 
-### [ ] T2-2: Session page + Phase 1 UI
+### [x] T2-2: Session page + Phase 1 UI ✅ (Session 9)
 **Deps:** T2-1
 **Context:** `app/session/page.tsx`. Poll mỗi 30s, tick local giữa poll. Phase 1: Sudoku 9x9 tĩnh (hardcode 1 puzzle hợp lệ).
+**Impl:** page (Server: validate `id` → redirect landing nếu sai) → `SessionView` (Client: poll `/api/session-status?id=` 30s + tick 1s; phase do SERVER quyết, Date.now() chỉ cho countdown display) → `Sudoku` (pure, 81 ô, border 3×3). Phase 2/3/CLAIMABLE = placeholder (T2-3/T2-4/T3-1); EXPIRED/COMPLETED có màn riêng. Mock dev `?mock=<delta>` verify offline mọi phase (MOCK-FIRST). Countdown + Sudoku tách `lib/` (test offline). Render thật `next dev`: 81 ô + 4 phase + redirect 307 OK.
 **Checklist:**
-- [ ] Poll mỗi 30s, update phase từ server response (không quyết phase bằng Date.now())
-- [ ] Countdown = `serverDelta + (Date.now() - fetchTime)/1000`
-- [ ] Sudoku 9x9 render rõ, border phân chia ô
-- [ ] session_id không hợp lệ → redirect landing
+- [x] Poll mỗi 30s, update phase từ server response (không quyết phase bằng Date.now())
+- [x] Countdown = `serverDelta + (Date.now() - fetchTime)/1000`
+- [x] Sudoku 9x9 render rõ, border phân chia ô
+- [x] session_id không hợp lệ → redirect landing
 
 ### [ ] T2-3: Phase 2 UI — Offline Quest (Blind Box)
 **Deps:** T2-2, T2-7

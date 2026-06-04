@@ -65,3 +65,25 @@ export function deriveSessionStatus(
     claim_window_expired: deltaSeconds > CLAIM_CLOSE,
   };
 }
+
+/**
+ * Δt "sống" để client tick countdown MƯỢT giữa 2 lần poll (specs §4 Module 2).
+ * = serverDelta + thời gian trôi kể từ lúc nhận response. CHỈ để HIỂN THỊ (Invariant #1:
+ * client dùng thời gian để display; quyết định phase vẫn theo server poll). Pure: nhận
+ * `nowMs` làm tham số (không gọi Date.now() bên trong) → test được.
+ */
+export function computeLiveDelta(
+  serverDelta: number,
+  fetchTimeMs: number,
+  nowMs: number,
+): number {
+  return serverDelta + (nowMs - fetchTimeMs) / 1000;
+}
+
+/** Format giây → "MM:SS" (zero-pad). Clamp số âm về "00:00". */
+export function formatMMSS(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
