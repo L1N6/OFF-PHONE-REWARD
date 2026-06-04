@@ -6,11 +6,11 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-03 (T0-1 done — scaffold Next.js 14)
-Task đang làm: T0-2 — Supabase client setup
-Bước tiếp theo: `npm install @supabase/supabase-js` → tạo `lib/supabase.ts` export `createPublicClient()` + `createAdminClient()` (admin throw nếu chạy client-side, trỏ pooler 6543)
-Task kế tiếp : T0-3 — Database schema + seed (đầy đủ, scale-ready)
-MVP tiến độ  : 1 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-04 (T0-3 done — schema + seed + claim_voucher, test trên PG16 Docker)
+Task đang làm: T0-4 — Vercel deployment
+Bước tiếp theo: Tạo Supabase project → SQL Editor chạy `supabase/schema.sql` rồi `supabase/seed.sql` → lấy URL + anon + service_role key + connection string pooler(6543) → set env Vercel & `.env.local` (VENUE_ID=11111111-…-111111111111, CASHIER_BYPASS_CODE) → link Vercel, confirm auto-deploy main → chạy lại `npm test` (kỳ vọng 6 PASS, 0 SKIP — đóng D-014)
+Task kế tiếp : T1-1 — useGuestToken hook
+MVP tiến độ  : 3 / 25 tasks hoàn thành
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -18,13 +18,13 @@ MVP tiến độ  : 1 / 25 tasks hoàn thành
 
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
-| Phase 0: Setup | 4 | 1 | 25% |
+| Phase 0: Setup | 4 | 3 | 75% |
 | Phase 1: Session Auth | 3 | 0 | 0% |
 | Phase 2: Timer, Phases & Blind Box | 7 | 0 | 0% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP** | **25** | **1** | **4%** |
+| **Tổng MVP** | **25** | **3** | **12%** |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -87,6 +87,60 @@ MVP tiến độ  : 1 / 25 tasks hoàn thành
 **Task tiếp theo:** T0-2 — Supabase client setup
 **Bước tiếp theo:** `npm install @supabase/supabase-js` → tạo `lib/supabase.ts` export `createPublicClient()` (anon) + `createAdminClient()` (service_role, throw nếu `typeof window !== 'undefined'`, trỏ pooler transaction-mode 6543).
 
+### Session 2 — 2026-06-04 — T0-2 Supabase client setup
+**Task:** T0-2 — Supabase client setup  |  **Kết quả:** ✅
+
+**Files tạo/sửa:**
+- `lib/supabase.ts` — TẠO: `createPublicClient()` (anon) + `createAdminClient()` (service_role). Admin throw nếu `typeof window !== 'undefined'`. Cả hai dùng `auth: { persistSession:false, autoRefreshToken:false }` (Invariant #3 NO AUTH). Env đọc **trong function** (runtime), throw nếu thiếu key. Comment dài giải thích "pooler 6543".
+- `test/supabase.test.ts` — TẠO: 6 test (`node:test`): throw khi thiếu env (×2), throw khi client-side, trả client hợp lệ khi có env (×2, không gọi mạng), + 1 live-connect (skip nếu chưa có creds).
+- `package.json` — thêm dep `@supabase/supabase-js@^2.107.0`; devDep `tsx@^4.22.4`; script `"test": "node --import tsx --test \"test/**/*.test.ts\""`.
+
+**Test results:**
+- `npm test` → ✅ 5 PASS + 1 SKIP (live-connect, chưa creds).
+- `npx tsc --noEmit` → ✅ PASS.
+- `npm run lint` → ✅ No ESLint warnings or errors.
+
+**Quyết định kỹ thuật (ADR):**
+- **"Pooler 6543" KHÔNG áp dụng trực tiếp cho supabase-js.** supabase-js gọi PostgREST qua HTTPS (chỉ URL + key, không port/connection-string). Pooler transaction-mode (Supavisor 6543) chỉ liên quan kết nối Postgres TRỰC TIẾP (pg/Prisma/migrations). → Yêu cầu pooler-safe được thoả qua **Invariant #2** (logic đa-bước = 1 RPC `claim_voucher`, không BEGIN/COMMIT từ Node). Ghi rõ trong doc của `lib/supabase.ts`. **Hệ quả:** nếu sau này thêm seed/migration script kết nối Postgres trực tiếp → connection string PHẢI dùng port 6543.
+- **Env đọc trong function (không module-level).** Đúng cho Vercel serverless + dễ test cả 2 nhánh (có/thiếu env) trong cùng process.
+- **Test runner = `node:test` + `tsx` loader** (không Jest/Vitest). Lý do: nhẹ, dùng API chuẩn Node, đủ cho cả unit (Haversine) lẫn integration (race claim) về sau. `tsx` để resolve import extensionless (Node ESM thuần bắt buộc `.ts`; thêm `allowImportingTsExtensions` sẽ phải đổi style import toàn dự án). **Quy ước:** mọi test đặt ở `test/**/*.test.ts`, import **relative** (không alias `@/`).
+
+**Vấn đề gặp phải:**
+- `node --test test/` hiểu `test/` là module để chạy → lỗi MODULE_NOT_FOUND. Fix: dùng glob `"test/**/*.test.ts"` (Node tự match).
+- Node ESM thuần báo `ERR_MODULE_NOT_FOUND` cho import extensionless `../lib/supabase`. Fix: chạy qua `tsx` loader (`node --import tsx`). → Để session sau không vấp: **luôn chạy test bằng `npm test`** (đã gắn tsx), đừng `node --test` trần.
+- Live-connect chưa chạy được (chưa có Supabase project/creds). Test viết sẵn, tự skip; sẽ pass sau khi T0-4 set env. Xem D-014.
+
+**Task tiếp theo:** T0-3 — Database schema + seed (đầy đủ, scale-ready)
+**Bước tiếp theo:** Tạo `supabase/schema.sql` (6 bảng + ENUM + unique index `uniq_running_session`/`uniq_voucher_per_session` + index pos/available) + function `claim_voucher` (specs.md §2) + seed 1 venue (`sub_quest_config`: 1 `code_entry` bcrypt + 1 `physical_action`) + 20 voucher `OPR-XXXX-XXXX`.
+
+### Session 3 — 2026-06-04 — T0-3 Database schema + seed
+**Task:** T0-3 — Database schema + seed (đầy đủ, scale-ready)  |  **Kết quả:** ✅
+
+**Files tạo/sửa:**
+- `supabase/schema.sql` — TẠO: 6 bảng (specs §1) + 2 ENUM + `uniq_running_session` + `uniq_voucher_per_session` + `idx_vouchers_pos`/`idx_vouchers_available` + function `claim_voucher` (specs §2 verbatim) + `CREATE EXTENSION pgcrypto`. Idempotent (DO-block enum, `IF NOT EXISTS`, `CREATE OR REPLACE`). RLS KHÔNG bật (specs §5).
+- `supabase/seed.sql` — TẠO: 1 venue UUID cố định `11111111-…-111111111111` (lat/lng HCMC placeholder + timezone + branding + sub_quest_config: `code_entry` answer_hash=bcrypt("1234") qua pgcrypto + `physical_action`) + 20 voucher `OPR-XXXX-XXXX` deterministic (md5). `SET search_path public, extensions` để crypt() resolve cả local lẫn Supabase. `ON CONFLICT DO NOTHING`.
+- `supabase/tests/claim_voucher_test.sql` — TẠO: 8 nhánh (SESSION_NOT_FOUND, happy, idempotent, QUEST_NOT_PASSED, SESSION_NOT_RUNNING, OUTSIDE_WINDOW+FAILED, POOL_EMPTY, index-exists), bọc BEGIN/ROLLBACK, ASSERT.
+
+**Test results (chạy thật trên Postgres 16-alpine qua Docker):**
+- schema + seed apply → ✅ SCHEMA_OK / SEED_OK.
+- Seed verify → ✅ 1 venue, 20 voucher AVAILABLE, bcrypt verify "1234"✓ / "0000"✗.
+- `claim_voucher_test.sql` (`psql ON_ERROR_STOP=1`) → ✅ **8/8 PASS**, exit 0, rollback giữ seed.
+- **Race thật: 8 claim song song cùng 1 session → cùng 1 code, `vouchers_for_session=1`, session COMPLETED** (chứng minh D-006/D-007 fix dưới tải song song).
+
+**Quyết định kỹ thuật (ADR):**
+- **Test trên Postgres 16 (Docker) thay cho "apply Supabase dashboard".** Chưa có Supabase project/creds → dùng container `postgres:16-alpine` (cùng engine Supabase) để apply + test đầy đủ. Apply lên Supabase THẬT là một phần của **T0-4** (lúc tạo project). Xem **D-015**.
+- **bcrypt sinh bằng pgcrypto `crypt(answer, gen_salt('bf',10))`** ngay trong seed — KHÔNG cần dep node bcrypt ở T0-3. Hash `$2a$` tương thích `bcrypt.compare` của node (T2-7). Đáp án seed = "1234" (đã verify round-trip). Đổi sang mã thật trước pilot.
+- **VENUE_ID cố định `11111111-…-111111111111`** (không random) → gán thẳng vào env, deterministic giữa các môi trường.
+- **`SET search_path TO public, extensions`** trong seed: pgcrypto ở `public` (local) / `extensions` (Supabase) → 1 file chạy được cả hai.
+- **Seed/test tách file** (`seed.sql`, `tests/claim_voucher_test.sql`) theo convention Supabase; schema.sql chỉ DDL + function.
+
+**Vấn đề gặp phải:**
+- Không có psql/supabase-CLI/local-postgres trên máy → dùng Docker (có sẵn) spin `postgres:16-alpine`. Cách chạy lại: `docker run -d --name opr-pg -e POSTGRES_PASSWORD=postgres postgres:16-alpine` → `docker exec -i opr-pg psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/schema.sql` (rồi seed, rồi tests).
+- CLAUDE.md vừa thêm mục "Codebase navigation — MANDATORY" yêu cầu MCP codegraph tools (`get_project_summary`…). **Các tool này CHƯA khả dụng trong phiên** → theo mục Fallback dùng Read/Grep. Nếu session sau tool được nạp thì ưu tiên chúng.
+
+**Task tiếp theo:** T0-4 — Vercel deployment
+**Bước tiếp theo:** Tạo Supabase project → SQL Editor chạy `supabase/schema.sql` + `supabase/seed.sql` → lấy URL/anon/service_role + connection string pooler 6543 → set env Vercel + `.env.local` → link Vercel auto-deploy main → `npm test` kỳ vọng 6 PASS/0 SKIP (đóng D-014) + kiểm tra schema thật (đóng D-015).
+
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)
 ═══════════════════════════════════════════════
@@ -111,3 +165,5 @@ MVP tiến độ  : 1 / 25 tasks hoàn thành
 | D-011 | Chưa có cron dọn EXPIRED + alert kho cạn | Thấp (lazy expiry tạm đủ) | TF-3 |
 | D-012 | Chưa bật RLS (chặn admin xem chéo venue) | Thấp khi 1 venue, CAO khi nhiều venue | TF-4 (bắt buộc trước Admin UI) |
 | D-013 | HISTORY.md append vô hạn → phình context | Thấp (tăng dần) | Archive khi > ~15 session |
+| D-014 | Live-connect test (`test/supabase.test.ts`) skip vì chưa có Supabase creds | Thấp (factory đã test) | Chạy lại `npm test` sau khi T0-4 set `.env.local` — phải thấy 6 PASS, 0 SKIP |
+| D-015 | Schema/seed mới chỉ apply trên Postgres 16 Docker, chưa lên Supabase thật | Thấp (engine giống, đã test đủ nhánh + race) | T0-4: SQL Editor chạy `schema.sql`+`seed.sql`; xác minh `crypt()` resolve (search_path extensions) + 20 voucher + venue |

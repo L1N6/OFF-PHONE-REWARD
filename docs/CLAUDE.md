@@ -1,6 +1,17 @@
 # CLAUDE.md — Off-Phone Rewards
 # Đọc file này đầu tiên trong mọi session.
 
+## Codebase navigation — MANDATORY
+
+Thứ tự bắt buộc trước khi đọc bất kỳ file nào:
+
+1. **Orient**: `get_project_summary` (1 lần/session) → `find_symbol` → `get_dependencies`
+2. **Extract**: `get_function_source` / `get_class_source` / `get_dependents`
+3. **Impact check**: `get_change_impact` trước khi sửa bất cứ thứ gì
+4. **Fallback**: chỉ dùng Read/Grep khi MCP tools không cover được
+
+KHÔNG được đọc file chỉ để "hiểu context" — dùng `get_project_summary` thay thế.
+
 ## Startup
 1. Read @docs/PLAYBOOK.md và @docs/HISTORY.md → paste Lệnh 1 trong PLAYBOOK
 2. PLAYBOOK tự điều phối mọi thứ — không cần đọc file khác trước

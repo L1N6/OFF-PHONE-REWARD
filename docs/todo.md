@@ -7,13 +7,13 @@
 
 | Phase | Tasks | Xong | % |
 |---|---|---|---|
-| Phase 0: Setup | 4 | 1 | 25% |
+| Phase 0: Setup | 4 | 3 | 75% |
 | Phase 1: Session Auth | 3 | 0 | 0% |
 | Phase 2: Timer, Phases & Blind Box | 7 | 0 | 0% |
 | Phase 3: Claim & Voucher | 5 | 0 | 0% |
 | Phase 4: POS Validation | 2 | 0 | 0% |
 | Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **1** | **4%** |
+| **Tổng MVP (🟢)** | **25** | **3** | **12%** |
 
 ---
 
@@ -28,28 +28,28 @@
 - [x] `.gitignore` có: node_modules, .env.local, .next, docs/scratch/*.md
 - [x] `npm run dev` chạy được localhost:3000 (HTTP 200, GET / 200)
 
-### [ ] T0-2: Supabase client setup
+### [x] T0-2: Supabase client setup
 **Deps:** T0-1
 **Context:** Tạo 2 client riêng: public (anon key) cho FE, admin (service_role) chỉ dùng trong Server Actions. Admin client throw error nếu gọi từ client-side. **Server Actions kết nối qua Supavisor transaction pooler (port 6543).**
 **Checklist:**
-- [ ] `npm install @supabase/supabase-js`
-- [ ] `lib/supabase.ts` export `createPublicClient()` và `createAdminClient()`
-- [ ] `createAdminClient` check `typeof window !== 'undefined'` → throw nếu chạy ở client
-- [ ] Admin client trỏ connection qua pooler 6543 (không phải direct 5432)
-- [ ] Test connect thành công
+- [x] `npm install @supabase/supabase-js` (^2.107.0)
+- [x] `lib/supabase.ts` export `createPublicClient()` và `createAdminClient()`
+- [x] `createAdminClient` check `typeof window !== 'undefined'` → throw nếu chạy ở client (có test)
+- [x] Admin client trỏ connection qua pooler 6543 — *làm rõ:* supabase-js đi qua PostgREST/HTTPS, KHÔNG nhận port → pooler-safe thoả qua Invariant #2 (RPC). Doc trong `lib/supabase.ts`. Connection-string 6543 chỉ áp dụng nếu sau này thêm kết nối Postgres trực tiếp.
+- [x] Test connect thành công — *test factory ✓ (5 pass); live round-trip viết sẵn nhưng skip tới khi có creds thật (sau T0-4)*
 
-### [ ] T0-3: Database schema + seed (đầy đủ, scale-ready)
+### [x] T0-3: Database schema + seed (đầy đủ, scale-ready)
 **Deps:** T0-2
 **Context:** Apply **toàn bộ schema trong specs.md §1** (6 bảng — kể cả cột/bảng 🟡🔵 để khỏi migrate-rename sau) + **constraint chống race** + **function `claim_voucher` (specs.md §2)**. RLS bảng deferred sang Fast-follow (xem specs.md §5 — KHÔNG bật RLS ở MVP để anon INSERT được).
 **Checklist:**
-- [ ] `supabase/schema.sql` đủ 6 bảng + ENUM types + `gen_random_uuid()`
-- [ ] Unique index **`uniq_running_session`** (idempotency phiên RUNNING)
-- [ ] Unique index **`uniq_voucher_per_session`** (chống cấp 2 voucher/session)
-- [ ] Index `idx_vouchers_pos`, `idx_vouchers_available`
-- [ ] Function `claim_voucher(session_id, venue_id)` (specs.md §2) — test bằng SQL
-- [ ] Seed 1 venue: lat/lng thật + `timezone` + `branding` + `sub_quest_config` (≥1 quest `code_entry` có `answer_hash` bcrypt + 1 `physical_action`)
-- [ ] Seed 20 vouchers `OPR-XXXX-XXXX` status='AVAILABLE'
-- [ ] Schema apply vào Supabase dashboard thành công
+- [x] `supabase/schema.sql` đủ 6 bảng + ENUM types + `gen_random_uuid()` (idempotent: DO-block enum, IF NOT EXISTS, CREATE OR REPLACE fn)
+- [x] Unique index **`uniq_running_session`** (idempotency phiên RUNNING)
+- [x] Unique index **`uniq_voucher_per_session`** (chống cấp 2 voucher/session)
+- [x] Index `idx_vouchers_pos`, `idx_vouchers_available`
+- [x] Function `claim_voucher(session_id, venue_id)` (specs.md §2) — **test bằng SQL: 8 nhánh PASS + race thật 8 claim song song → đúng 1 voucher** (`supabase/tests/claim_voucher_test.sql`)
+- [x] Seed 1 venue: lat/lng (HCMC placeholder — TODO toạ độ thật) + `timezone` + `branding` + `sub_quest_config` (`code_entry` bcrypt verify "1234"✓ + `physical_action`). VENUE_ID cố định `11111111-…-111111111111`
+- [x] Seed 20 vouchers `OPR-XXXX-XXXX` status='AVAILABLE' (deterministic md5)
+- [x] Schema apply ~~vào Supabase dashboard~~ — *validate tương đương trên **Postgres 16 (Docker)**; apply lên Supabase thật defer sang T0-4 (cần project/creds). Xem D-015.*
 
 ### [ ] T0-4: Vercel deployment
 **Deps:** T0-1

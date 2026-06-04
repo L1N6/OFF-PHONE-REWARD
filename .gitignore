@@ -49,3 +49,6 @@ next-env.d.ts
 
 # project: file tạm handoff (theo CLAUDE.md)
 docs/scratch/*.md
+
+# codegraph indexer — state cục bộ (không thuộc app)
+/.codegraph/
