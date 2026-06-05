@@ -9,11 +9,11 @@
 |---|---|---|---|
 | Phase 0: Setup | 4 | 4 | 100% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 6 | 86% |
-| Phase 3: Claim & Voucher | 5 | 0 | 0% |
-| Phase 4: POS Validation | 2 | 0 | 0% |
-| Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP (🟢)** | **25** | **13** | **52%** |
+| Phase 2: Timer, Phases & Blind Box | 7 | 7 | 100% |
+| Phase 3: Claim & Voucher | 5 | 5 | 100% |
+| Phase 4: POS Validation | 2 | 2 | 100% |
+| Phase 5: Polish | 4 | 3 | 75% |
+| **Tổng MVP (🟢)** | **25** | **24** | **96%** |
 
 ---
 
@@ -152,13 +152,14 @@
 - [x] Warning banner sau 3 vi phạm (`infractions >= 3` → banner fixed-top)
 - [x] MVP: không auto-fail session (chỉ đếm để cảnh báo)
 
-### [ ] T2-6: Clock sync
+### [x] T2-6: Clock sync ✅ (Session 15)
 **Deps:** T2-1, T2-2
 **Context:** Offset client-server. Countdown lệch < 2s.
+**Impl:** Anchor `startEpochRef` (client-clock ms) resync mỗi poll qua pure `reconcileStartEpoch` (ease 34% khi lệch <5s / snap khi ≥5s) + `elapsedSince` → countdown KHÔNG giật. 5 unit test offline. (2 mục đầu đã có từ T2-2.)
 **Checklist:**
-- [ ] Ghi `fetchTime = Date.now()` ngay khi nhận response
-- [ ] Countdown = `serverDelta + (Date.now() - fetchTime)/1000`
-- [ ] Resync mỗi poll thành công, smooth nếu lệch < 5s
+- [x] Ghi `fetchTime = Date.now()` ngay khi nhận response (qua reconcileStartEpoch lúc poll)
+- [x] Countdown = `serverDelta + (Date.now() - fetchTime)/1000` (tương đương `elapsedSince(anchor)`)
+- [x] Resync mỗi poll thành công, smooth nếu lệch < 5s (ease) / snap khi ≥5s
 
 ### [x] T2-7: validateSubQuest Server Action 🟢 ✅ (Session 10) (MVP: code_entry + physical_action)
 **Deps:** T0-3
@@ -176,95 +177,105 @@
 
 ## Phase 3 — Claim & Voucher
 
-### [ ] T3-1: CLAIM button logic
+### [x] T3-1: CLAIM button logic ✅ (Session 16)
 **Deps:** T2-1
 **Context:** Hiện CLAIM khi `claim_window_open=true` **và** `sub_quest_passed=true`. Expired khi `claim_window_expired=true`.
+**Impl:** Pure `deriveClaimView(status, passed)` → `CLAIM|NEED_QUEST|EXPIRED|NONE` (lib/sessionStatus, test offline 6 nhánh) + `ClaimPanel.tsx` render 3 view (nút CLAIM amber to/nổi bật / nhắc Blind Box / hết hạn+landing). `passed`=effective (server || optimistic localPassed). `onClaim` để TRỐNG (seam T3-2..T3-4; bấm → "đang chuẩn bị"). Mock dev `?passed=1` verify nút CLAIM offline. Render thật mock=2750&passed=1→CLAIM, mock=2750→NEED_QUEST, mock=3000→EXPIRED đều 200.
 **Checklist:**
-- [ ] CLAIM chỉ hiện đúng window 45–48' (server field) và đã pass quest
-- [ ] Chưa pass quest trong window → nhắc hoàn thành Blind Box
-- [ ] Expired sau 48': message + link landing
-- [ ] Nút to, nổi bật (CTA quan trọng nhất)
+- [x] CLAIM chỉ hiện đúng window 45–48' (server field) và đã pass quest
+- [x] Chưa pass quest trong window → nhắc hoàn thành Blind Box
+- [x] Expired sau 48': message + link landing
+- [x] Nút to, nổi bật (CTA quan trọng nhất)
 
-### [ ] T3-2: GPS coordinate capture
+### [x] T3-2: GPS coordinate capture ✅ (Session 17)
 **Deps:** T3-1
 **Context:** `getCurrentPosition({enableHighAccuracy:true, timeout:10000})`. OK → claimVoucher. Fail → T3-3.
+**Impl:** Lõi injectable `lib/geolocation.ts` — `getPosition(geo, GEO_OPTIONS)` → `GeoResult` (luôn resolve, không reject) + `classifyGeoError` (1/2/3→DENIED/UNAVAILABLE/TIMEOUT) + `ACCURACY_WARN_M=100` (test offline 9 nhánh). ClaimPanel nút CLAIM → state machine idle→locating→located|geo_error: located gọi `onLocated({lat,lng})` (seam T3-4, accuracy>100m vẫn tiếp tục + cảnh báo); geo_error message thân thiện + "Thử lại" + chỗ ráp bypass (T3-3). KHÔNG lưu toạ độ (dùng rồi discard).
 **Checklist:**
-- [ ] Loading "Đang lấy vị trí..."
-- [ ] Timeout 10s
-- [ ] PERMISSION_DENIED / TIMEOUT / UNAVAILABLE → fallback T3-3
-- [ ] accuracy > 100m → warning nhưng vẫn tiếp tục
+- [x] Loading "Đang lấy vị trí..."
+- [x] Timeout 10s
+- [x] PERMISSION_DENIED / TIMEOUT / UNAVAILABLE → fallback T3-3
+- [x] accuracy > 100m → warning nhưng vẫn tiếp tục
 
-### [ ] T3-3: Manual bypass fallback 🟢 (MVP: static code)
+### [x] T3-3: Manual bypass fallback 🟢 (MVP: static code) ✅ (Session 18)
 **Deps:** T3-2
 **Context:** GPS fail → nhập mã → validate `CASHIER_BYPASS_CODE` (constant-time). 🟡 Fast-follow: thay bằng OTP động (specs.md §4 Module 3).
+**Impl:** `lib/bypass.ts` — `safeEqual(a,b)` constant-time (SHA-256 cả hai → `timingSafeEqual` → length-safe, không throw/leak; test offline 4 nhánh). `actions/verifyBypass.ts` (`"use server"`) so env `CASHIER_BYPASS_CODE` (server-only) → `{ok,valid}` (mã sai/rỗng=valid:false; chưa set env=SERVER_ERROR; test offline 3 nhánh). ClaimPanel nhánh `geo_error` → `<BypassForm>` (input + Xác nhận) → `onBypass`; đúng → state `bypass_ok` (seam T3-4); sai HOẶC lỗi → cùng message "Mã không đúng, thử lại nhé" (không reveal). Mock dev "1234". ⚠️ T3-4 phải RE-CHECK mã server-side (không tin client).
 **Checklist:**
-- [ ] Fallback UI rõ ràng, không gây bực bội
-- [ ] Server so sánh env var bằng constant-time (chống timing attack)
-- [ ] Mã sai → lỗi thân thiện, không reveal lý do
+- [x] Fallback UI rõ ràng, không gây bực bội
+- [x] Server so sánh env var bằng constant-time (chống timing attack)
+- [x] Mã sai → lỗi thân thiện, không reveal lý do
 
-### [ ] T3-4: claimVoucher Server Action (qua RPC claim_voucher)
+### [x] T3-4: claimVoucher Server Action (qua RPC claim_voucher) ✅ (Session 19)
 **Deps:** T0-3, T3-2, T3-3
 **Context:** `actions/claimVoucher.ts` (specs.md §2 + §4 Module 3). Action: validate presence (Haversine GPS **hoặc** bypass) → gọi **RPC `claim_voucher`** (nơi nguyên tử: re-check window SQL, gate sub_quest, cấp voucher, COMPLETED). KHÔNG tự tính thời gian bằng Date.now().
+**Impl:** `lib/haversine.ts` (pure, test 5 điểm biết trước) + `lib/claim.ts` (shared types ClaimPresence/ClaimVoucherResult). `actions/claimVoucher.ts` (`"use server"`): `verifyPresence` (bypass re-verify `safeEqual` / GPS Haversine ≤ `venue.radius_meters`, toạ độ discard) → RPC `claim_voucher` → map lỗi. ClaimPanel rewrite: idle→locating→claiming→claimed (mã voucher) | need_bypass (GPS lỗi/ngoài radius → form mã) | claim_error. SessionView wire `onClaim` (real/mock demo). **Live race test 2 request → 1 voucher + COMPLETED + idempotent PASS.**
 **Checklist:**
-- [ ] Haversine trong `lib/haversine.ts` + test điểm biết trước
-- [ ] Presence: GPS trong radius HOẶC bypass code hợp lệ
-- [ ] Gọi RPC `claim_voucher` — không BEGIN/COMMIT thủ công ở Node
-- [ ] Idempotent: session đã có voucher → trả lại code cũ (RPC lo)
-- [ ] Map error RPC: SESSION_NOT_RUNNING / QUEST_NOT_PASSED / OUTSIDE_WINDOW / POOL_EMPTY → message thân thiện
-- [ ] **Test race: 2 request đồng thời cùng session → đúng 1 voucher**
+- [x] Haversine trong `lib/haversine.ts` + test điểm biết trước
+- [x] Presence: GPS trong radius HOẶC bypass code hợp lệ
+- [x] Gọi RPC `claim_voucher` — không BEGIN/COMMIT thủ công ở Node
+- [x] Idempotent: session đã có voucher → trả lại code cũ (RPC lo)
+- [x] Map error RPC: SESSION_NOT_RUNNING / QUEST_NOT_PASSED / OUTSIDE_WINDOW / POOL_EMPTY → message thân thiện
+- [x] **Test race: 2 request đồng thời cùng session → đúng 1 voucher**
 
-### [ ] T3-5: Voucher display screen
+### [x] T3-5: Voucher display screen ✅ (Session 20)
 **Deps:** T3-4
 **Context:** Success screen, voucher code to dạng coupon. Lưu sessionStorage.
+**Impl:** `lib/voucher.ts` (pure read/write `claimed_voucher`, test offline 3 nhánh) + `VoucherScreen.tsx` (coupon mono text-3xl, viền dashed + "lỗ vé", CTA "Thử lại ngày mai"). SessionView: state `claimedVoucher` (restore từ sessionStorage khi mount, non-mock) + render ƯU TIÊN CAO NHẤT (trước cả COMPLETED → reload phiên đã xong vẫn hiện mã, không phải màn trống); `handleClaimed` lưu + setState. ClaimPanel claim ok → `onClaimed(code)`. Mock dev `?voucher=<code>`.
 **Checklist:**
-- [ ] Code font lớn, monospace, dễ đọc, design ticket/coupon
-- [ ] Lưu `claimed_voucher` sessionStorage, restore khi reload
-- [ ] CTA "Thử lại ngày mai"
+- [x] Code font lớn, monospace, dễ đọc, design ticket/coupon
+- [x] Lưu `claimed_voucher` sessionStorage, restore khi reload
+- [x] CTA "Thử lại ngày mai"
 
 ---
 
 ## Phase 4 — POS Validation
 
-### [ ] T4-1: Cashier validation page
+### [x] T4-1: Cashier validation page ✅ (Session 21)
 **Deps:** T0-1
 **Context:** `app/validate/page.tsx`. Mobile-first. Input lớn + nút VALIDATE.
+**Impl:** `lib/voucherValidation.ts` (types `ValidateVoucherResult`/4 status + `describeVoucherResult` pure→banner tone + `mockValidateVoucher`, test offline 5). `app/validate/page.tsx` (server shell + metadata). `app/_components/Validate.tsx` (client, mobile-first max-w-md): input mã text-2xl mono + autoCapitalize + Enter-submit, nút KIỂM TRA to; banner 4 trạng thái (ok/warn/error tone) + giờ REDEEMED; tự clear input sau kiểm tra. MOCK-FIRST: `runValidate = mockValidateVoucher` → T4-2 thay bằng `validateVoucher` action.
 **Checklist:**
-- [ ] Input + button đủ lớn trên mobile
-- [ ] Hiện: ✅ Hợp lệ 10% Off | ❌ Chưa claim | ⚠️ Đã dùng | ❌ Không hợp lệ
-- [ ] Tự clear input sau validate
+- [x] Input + button đủ lớn trên mobile
+- [x] Hiện: ✅ Hợp lệ 10% Off | ❌ Chưa claim | ⚠️ Đã dùng | ❌ Không hợp lệ
+- [x] Tự clear input sau validate
 
-### [ ] T4-2: validateVoucher Server Action
+### [x] T4-2: validateVoucher Server Action ✅ (Session 22)
 **Deps:** T0-3, T4-1
 **Context:** `actions/validateVoucher.ts` (specs.md §4 Module 4). UPDATE REDEEMED atomic.
+**Impl:** RPC `validate_voucher(p_code, p_venue_id)` (schema.sql): UPDATE REDEEMED WHERE RESERVED+chưa hết hạn RETURNING → FOUND='VALID'; 0 dòng → truy vấn phụ (không tồn tại/hết hạn→INVALID · AVAILABLE→NOT_CLAIMED · REDEEMED→USED+redeemed_at). 1 RPC atomic chống double-redeem race. `actions/validateVoucher.ts` (`"use server"`) normalize trim+UPPER + venue env → map `ValidateVoucherResult`. Validate.tsx `runValidate=validateVoucher`. **Docker SQL test 6 nhánh ALL PASS** (gồm double-redeem); live race probe-skip tới khi apply schema. ⚠️ **schema.sql đổi → user apply lại Supabase.**
 **Checklist:**
-- [ ] UPDATE ... WHERE status='RESERVED' AND expires_at>NOW() RETURNING → 1 dòng = ✅
-- [ ] 0 dòng → phân biệt AVAILABLE / REDEEMED / không tồn tại-hết hạn
-- [ ] Atomic, chống double-redeem race
+- [x] UPDATE ... WHERE status='RESERVED' AND expires_at>NOW() RETURNING → 1 dòng = ✅
+- [x] 0 dòng → phân biệt AVAILABLE / REDEEMED / không tồn tại-hết hạn
+- [x] Atomic, chống double-redeem race
 
 ---
 
 ## Phase 5 — Polish
 
-### [ ] T5-1: Session resume khi reload
+### [x] T5-1: Session resume khi reload ✅ (Session 23)
 **Deps:** T1-2, T2-2
 **Context:** Load /session → check sessionStorage → gọi API → tiếp tục đúng phase. Không tạo session mới.
+**Impl:** `lib/sessionStore.ts` (pure read/write `session_id`, test offline 3). `ResumeGate.tsx`: /session KHÔNG `?id=` → đọc sessionStorage → `router.replace('/session?id=<id>')` (resume, không tạo mới) / không có → landing. page.tsx: id sai định dạng→redirect landing; id vắng→`<ResumeGate>`; id hợp lệ→SessionView (như cũ). SessionView lưu `session_id` mỗi khi mount (resume sau). Landing dùng chung helper. RUNNING→poll resume phase · COMPLETED→VoucherScreen (claimed_voucher) hoặc "Đã hoàn thành" · EXPIRED→message+landing (có sẵn T2-2/T3-5).
 **Checklist:**
-- [ ] Refresh → tiếp tục đúng phase, không mất tiến độ
-- [ ] RUNNING → resume | COMPLETED → /claim | EXPIRED → landing + message
+- [x] Refresh → tiếp tục đúng phase, không mất tiến độ
+- [x] RUNNING → resume | COMPLETED → /claim | EXPIRED → landing + message
 
-### [ ] T5-2: Edge case messages
+### [x] T5-2: Edge case messages ✅ (Session 24)
 **Deps:** T3-4, T1-2
+**Impl:** Gom 3 message biên vào `lib/messages.ts` (MESSAGES, 1 nguồn sự thật) + wire: Landing RATE_LIMITED→`rateLimited`; ClaimPanel POOL_EMPTY→`poolEmpty` + view NEED_QUEST→`questNotPassedInWindow`. Test regression 3. (Cả 3 đã hiện hữu từ T1-3/T3-1/T3-4 — T5-2 centralize + thống nhất giọng.)
 **Checklist:**
-- [ ] Rate limit: "Bạn đã hoàn thành challenge hôm nay. Quay lại ngày mai!"
-- [ ] Pool empty: "Hết voucher hôm nay. Hỏi nhân viên để được hỗ trợ."
-- [ ] Quest chưa pass khi tới window: nhắc quay lại Blind Box
+- [x] Rate limit: "Bạn đã hoàn thành challenge hôm nay. Quay lại ngày mai!"
+- [x] Pool empty: "Hết voucher hôm nay. Hỏi nhân viên để được hỗ trợ."
+- [x] Quest chưa pass khi tới window: nhắc quay lại Blind Box
 
-### [ ] T5-3: Loading + error states
+### [x] T5-3: Loading + error states ✅ (Session 25)
 **Deps:** Tất cả task trên
+**Impl:** `app/loading.tsx` (spinner animate-spin route-level) + `app/error.tsx` (`"use client"` error boundary {error, reset} → màn thân thiện + nút "Thử lại" gọi reset() + link landing, log error useEffect). Defensive try/catch ở ClaimPanel `runClaim` (onClaim không reject nhưng phòng). Audit: mọi action có try/catch, fetch poll/infraction có catch → không unhandled rejection.
 **Checklist:**
-- [ ] `app/loading.tsx` (spinner/skeleton)
-- [ ] `app/error.tsx` với nút retry
-- [ ] Không unhandled promise rejection
+- [x] `app/loading.tsx` (spinner/skeleton)
+- [x] `app/error.tsx` với nút retry
+- [x] Không unhandled promise rejection
 
 ### [ ] T5-4: Smoke test end-to-end
 **Deps:** Tất cả task trên

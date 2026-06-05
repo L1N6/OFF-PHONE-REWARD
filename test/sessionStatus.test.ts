@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import {
   derivePhase,
   deriveSessionStatus,
+  deriveClaimView,
   computeLiveDelta,
   formatMMSS,
+  reconcileStartEpoch,
+  elapsedSince,
   CLAIM_OPEN,
   CLAIM_CLOSE,
 } from "../lib/sessionStatus";
@@ -65,6 +68,38 @@ test("deriveSessionStatus: quá 48' → EXPIRED, claim đóng + expired=true", (
   assert.equal(s.claim_window_expired, true);
 });
 
+// --- T3-1: deriveClaimView (logic hiển thị nút CLAIM) ---
+
+test("deriveClaimView: trong Giờ Vàng + đã pass quest → CLAIM", () => {
+  const s = deriveSessionStatus(2750, "RUNNING", true);
+  assert.equal(deriveClaimView(s, true), "CLAIM");
+});
+
+test("deriveClaimView: trong Giờ Vàng nhưng CHƯA pass quest → NEED_QUEST", () => {
+  const s = deriveSessionStatus(2750, "RUNNING", false);
+  assert.equal(deriveClaimView(s, false), "NEED_QUEST");
+});
+
+test("deriveClaimView: optimistic passed (server false, localPassed true) → CLAIM", () => {
+  const s = deriveSessionStatus(2750, "RUNNING", false); // server chưa thấy pass
+  assert.equal(deriveClaimView(s, true), "CLAIM"); // effective passed override
+});
+
+test("deriveClaimView: quá 48' → EXPIRED (ưu tiên hơn open/passed)", () => {
+  const s = deriveSessionStatus(3000, "EXPIRED", true);
+  assert.equal(deriveClaimView(s, true), "EXPIRED");
+});
+
+test("deriveClaimView: chưa tới Giờ Vàng (phase 1/2/3) → NONE", () => {
+  assert.equal(deriveClaimView(deriveSessionStatus(100, "RUNNING", false), false), "NONE");
+  assert.equal(deriveClaimView(deriveSessionStatus(2000, "RUNNING", true), true), "NONE");
+});
+
+test("deriveClaimView: đã COMPLETED trong window → NONE (status gate đóng claim_window_open)", () => {
+  const s = deriveSessionStatus(2750, "COMPLETED", true);
+  assert.equal(deriveClaimView(s, true), "NONE");
+});
+
 test("computeLiveDelta: cộng thời gian trôi kể từ fetch (giây)", () => {
   assert.equal(computeLiveDelta(1000, 5000, 8000), 1003); // +3s
   assert.equal(computeLiveDelta(1000, 5000, 5000), 1000); // vừa fetch
@@ -78,6 +113,30 @@ test("formatMMSS: MM:SS zero-pad, clamp âm về 00:00", () => {
   assert.equal(formatMMSS(CLAIM_OPEN), "45:00"); // mốc Giờ Vàng
   assert.equal(formatMMSS(CLAIM_CLOSE), "48:00");
   assert.equal(formatMMSS(-5), "00:00"); // âm (đã quá mốc) → 00:00
+});
+
+test("reconcileStartEpoch: lần đầu (null) → lấy candidate (fetchTime - serverDelta*1000)", () => {
+  assert.equal(reconcileStartEpoch(null, 100, 100_000), 0); // 100000 - 100*1000
+  assert.equal(reconcileStartEpoch(null, 0, 50_000), 50_000);
+});
+
+test("reconcileStartEpoch: lệch nhỏ <5s → EASE (không snap)", () => {
+  // prev=0, candidate = 101000-100000 = 1000 (drift 1000ms < 5000) → ease 0.34 → 340
+  assert.equal(reconcileStartEpoch(0, 100, 101_000, 5000, 0.34), 340);
+  // drift âm cũng ease
+  assert.equal(reconcileStartEpoch(1000, 100, 100_000, 5000, 0.5), 500); // candidate 0, drift -1000 → 1000-500
+});
+
+test("reconcileStartEpoch: lệch lớn ≥5s → SNAP về candidate", () => {
+  // prev=0, candidate = 110000-100000 = 10000 (drift 10000 ≥ 5000) → snap 10000
+  assert.equal(reconcileStartEpoch(0, 100, 110_000), 10_000);
+  assert.equal(reconcileStartEpoch(0, 100, 95_000), -5000); // drift -5000 (≥5000) → snap candidate
+});
+
+test("elapsedSince: giây trôi từ mốc bắt đầu", () => {
+  assert.equal(elapsedSince(0, 100_000), 100);
+  assert.equal(elapsedSince(1000, 101_000), 100);
+  assert.equal(elapsedSince(0, 0), 0);
 });
 
 // =====================================================================

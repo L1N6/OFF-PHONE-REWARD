@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useGuestToken } from "../../hooks/useGuestToken";
 import { createSession } from "../../actions/createSession";
 import { unlockAudio } from "../../lib/audio";
+import { writeStoredSessionId } from "../../lib/sessionStore";
+import { MESSAGES } from "../../lib/messages";
 import type { Branding } from "../../lib/branding";
 
 function errorMessage(
   error: "INVALID_TOKEN" | "RATE_LIMITED" | "SERVER_ERROR",
 ): string {
-  if (error === "RATE_LIMITED")
-    return "Bạn đã hoàn thành thử thách hôm nay rồi — quay lại ngày mai nhé! ☕";
+  if (error === "RATE_LIMITED") return MESSAGES.rateLimited;
   if (error === "INVALID_TOKEN")
     return "Phiên không hợp lệ. Hãy tải lại trang rồi thử lại.";
   return "Có lỗi xảy ra. Vui lòng thử lại.";
@@ -33,7 +34,7 @@ export function Landing({ branding }: { branding: Branding }) {
       sessionStorage.setItem("audio_gesture", "1");
       const result = await createSession(token);
       if (result.ok) {
-        sessionStorage.setItem("session_id", result.sessionId);
+        writeStoredSessionId(sessionStorage, result.sessionId);
         router.push(`/session?id=${result.sessionId}`);
         return; // giữ trạng thái loading trong lúc điều hướng
       }

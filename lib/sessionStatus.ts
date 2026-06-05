@@ -66,6 +66,25 @@ export function deriveSessionStatus(
   };
 }
 
+// Trạng thái HIỂN THỊ khu vực nhận thưởng (Giờ Vàng). Xem `deriveClaimView`.
+export type ClaimView = "CLAIM" | "NEED_QUEST" | "EXPIRED" | "NONE";
+
+/**
+ * T3-1 — trạng thái HIỂN THỊ của khu vực nhận thưởng (specs §4 Module 2/3). PURE, test offline.
+ * KHÔNG thực hiện claim (GPS / bypass / RPC `claim_voucher` là T3-2..T3-4); chỉ quyết định render gì:
+ *   • "CLAIM"      — trong Giờ Vàng (`claim_window_open`) VÀ đã pass Blind Box → nút CLAIM (CTA).
+ *   • "NEED_QUEST" — trong Giờ Vàng nhưng CHƯA pass quest → nhắc hoàn thành Blind Box.
+ *   • "EXPIRED"    — đã quá 48' (`claim_window_expired`) → message + về landing.
+ *   • "NONE"       — chưa tới Giờ Vàng (phase 1/2/3) hoặc phiên đã đóng (COMPLETED/FAILED).
+ * `passed` = effective: `status.sub_quest_passed || localPassed` (optimistic UX, poll xác nhận sau).
+ * `claim_window_open` đã tự gate `status==='RUNNING'` → COMPLETED/FAILED trong window → "NONE".
+ */
+export function deriveClaimView(status: SessionStatus, passed: boolean): ClaimView {
+  if (status.claim_window_expired) return "EXPIRED";
+  if (status.claim_window_open) return passed ? "CLAIM" : "NEED_QUEST";
+  return "NONE";
+}
+
 /**
  * Δt "sống" để client tick countdown MƯỢT giữa 2 lần poll (specs §4 Module 2).
  * = serverDelta + thời gian trôi kể từ lúc nhận response. CHỈ để HIỂN THỊ (Invariant #1:
@@ -86,4 +105,32 @@ export function formatMMSS(totalSeconds: number): string {
   const mm = Math.floor(s / 60);
   const ss = s % 60;
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+/**
+ * Clock sync (specs §4 Module 2) — đồng bộ "mốc bắt đầu phiên" (client-clock ms) qua mỗi poll
+ * để countdown KHÔNG giật. `candidate = fetchTimeMs - serverDelta*1000` (ước lượng lúc phiên
+ * bắt đầu, theo đồng hồ client tại lần poll này).
+ *   • Lần đầu (`prev=null`) → lấy thẳng candidate.
+ *   • Lệch lớn (|drift| ≥ `snapMs`) → SNAP (ước lượng cũ sai nhiều → nhảy tới đúng).
+ *   • Lệch nhỏ (< `snapMs`) → EASE (kéo prev về candidate theo `ease`, mượt qua vài poll).
+ * Pure → test offline. Display-only (Invariant #1: nguồn thời gian vẫn là serverDelta).
+ */
+export function reconcileStartEpoch(
+  prevStartEpoch: number | null,
+  serverDelta: number,
+  fetchTimeMs: number,
+  snapMs = 5000,
+  ease = 0.34,
+): number {
+  const candidate = fetchTimeMs - serverDelta * 1000;
+  if (prevStartEpoch === null) return candidate;
+  const drift = candidate - prevStartEpoch;
+  if (Math.abs(drift) >= snapMs) return candidate;
+  return prevStartEpoch + drift * ease;
+}
+
+/** Giây trôi kể từ mốc bắt đầu (client-clock). Pure. */
+export function elapsedSince(startEpochMs: number, nowMs: number): number {
+  return (nowMs - startEpochMs) / 1000;
 }

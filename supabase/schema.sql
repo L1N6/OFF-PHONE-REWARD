@@ -442,3 +442,43 @@ BEGIN
 
     RETURN COALESCE(v_count, -1);
 END $$;
+
+-- =====================================================================
+-- validate_voucher(p_code, p_venue_id)  🟢  — specs.md §4 Module 4 (POS redeem)
+--   Redeem NGUYÊN TỬ: UPDATE ... WHERE status='RESERVED' AND chưa hết hạn RETURNING.
+--   FOUND → 'VALID' (đúng 1 dòng — chống double-redeem race: 2 request đồng thời chỉ 1
+--   khớp 'RESERVED', request kia thấy đã REDEEMED → 0 dòng). 0 dòng → truy vấn phụ phân biệt:
+--   không tồn tại / hết hạn → 'INVALID' · AVAILABLE → 'NOT_CLAIMED' · REDEEMED → 'USED' (+redeemed_at).
+-- =====================================================================
+CREATE OR REPLACE FUNCTION validate_voucher(p_code VARCHAR, p_venue_id UUID)
+RETURNS TABLE(out_status TEXT, out_redeemed_at TIMESTAMPTZ)
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_redeemed TIMESTAMPTZ;
+    v_row      RECORD;
+BEGIN
+    UPDATE vouchers
+       SET status = 'REDEEMED', redeemed_at = NOW()
+     WHERE code = p_code AND venue_id = p_venue_id
+       AND status = 'RESERVED'
+       AND (expires_at IS NULL OR expires_at > NOW())
+    RETURNING redeemed_at INTO v_redeemed;
+
+    IF FOUND THEN
+        RETURN QUERY SELECT 'VALID'::TEXT, v_redeemed; RETURN;
+    END IF;
+
+    SELECT status, redeemed_at INTO v_row
+        FROM vouchers WHERE code = p_code AND venue_id = p_venue_id LIMIT 1;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT 'INVALID'::TEXT, NULL::TIMESTAMPTZ; RETURN;     -- không tồn tại
+    END IF;
+    IF v_row.status = 'AVAILABLE' THEN
+        RETURN QUERY SELECT 'NOT_CLAIMED'::TEXT, NULL::TIMESTAMPTZ; RETURN;
+    END IF;
+    IF v_row.status = 'REDEEMED' THEN
+        RETURN QUERY SELECT 'USED'::TEXT, v_row.redeemed_at; RETURN;
+    END IF;
+    -- RESERVED nhưng hết hạn (UPDATE ở trên không khớp do expires_at) → không hợp lệ.
+    RETURN QUERY SELECT 'INVALID'::TEXT, NULL::TIMESTAMPTZ; RETURN;
+END $$;

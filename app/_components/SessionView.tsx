@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   deriveSessionStatus,
-  computeLiveDelta,
+  deriveClaimView,
+  reconcileStartEpoch,
+  elapsedSince,
   formatMMSS,
   CLAIM_OPEN,
   type SessionStatus,
@@ -15,9 +17,15 @@ import { MOCK_QUESTS, type ActiveQuest } from "../../lib/quests";
 import { playBeep } from "../../lib/audio";
 import { validateSubQuest } from "../../actions/validateSubQuest";
 import { getActiveQuests } from "../../actions/getActiveQuests";
+import { verifyBypass } from "../../actions/verifyBypass";
+import { claimVoucher } from "../../actions/claimVoucher";
+import { readClaimedVoucher, writeClaimedVoucher } from "../../lib/voucher";
+import { writeStoredSessionId } from "../../lib/sessionStore";
 import { Sudoku } from "./Sudoku";
 import { BlindBox, type ValidateFn } from "./BlindBox";
 import { Meditation } from "./Meditation";
+import { ClaimPanel, type BypassFn, type ClaimFn } from "./ClaimPanel";
+import { VoucherScreen } from "./VoucherScreen";
 
 const POLL_MS = 30_000; // specs §4 Module 2: poll mỗi 30s, tick local giữa 2 poll
 
@@ -34,25 +42,31 @@ const POLL_MS = 30_000; // specs §4 Module 2: poll mỗi 30s, tick local giữa
 export function SessionView({
   sessionId,
   mockDelta,
+  mockPassed = false,
+  mockVoucher,
 }: {
   sessionId: string;
   mockDelta?: number;
+  mockPassed?: boolean;
+  mockVoucher?: string;
 }) {
   const router = useRouter();
   const isMock = mockDelta !== undefined;
 
-  // Mock: tính thẳng trong render → SSR hiển thị được. sub_quest_passed=false để test Blind Box.
+  // Mock: tính thẳng trong render → SSR hiển thị được. Mặc định sub_quest_passed=false để
+  // test Blind Box; `?passed=1` (mockPassed) → giả lập đã pass để verify nút CLAIM (T3-1).
   const mockStatus =
     mockDelta !== undefined
       ? deriveSessionStatus(
           mockDelta,
           mockDelta > 2880 ? "EXPIRED" : "RUNNING",
-          false,
+          mockPassed,
         )
       : null;
 
   const [status, setStatus] = useState<SessionStatus | null>(mockStatus);
-  const [fetchTime, setFetchTime] = useState<number>(0);
+  // Mốc bắt đầu phiên (client-clock ms) — resync mỗi poll (smooth/snap) cho countdown.
+  const startEpochRef = useRef<number | null>(null);
   const [now, setNow] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,13 +76,17 @@ export function SessionView({
   const [localPassed, setLocalPassed] = useState(false);
   const [beeped, setBeeped] = useState(false);
   const [infractions, setInfractions] = useState(0);
+  // Voucher đã nhận (T3-5): mock từ `?voucher=`; real restore từ sessionStorage khi mount.
+  const [claimedVoucher, setClaimedVoucher] = useState<string | null>(
+    mockVoucher ?? null,
+  );
 
   // Poll server (bỏ qua khi mock).
   useEffect(() => {
     setMounted(true);
     setNow(Date.now());
     if (isMock) {
-      setFetchTime(Date.now());
+      startEpochRef.current = Date.now() - (mockDelta ?? 0) * 1000;
       return;
     }
     let cancelled = false;
@@ -87,8 +105,13 @@ export function SessionView({
         }
         const data = (await res.json()) as SessionStatus;
         if (!cancelled) {
+          // Resync mốc bắt đầu: smooth nếu lệch <5s, snap nếu ≥5s → countdown không giật.
+          startEpochRef.current = reconcileStartEpoch(
+            startEpochRef.current,
+            data.delta_seconds,
+            Date.now(),
+          );
           setStatus(data);
-          setFetchTime(Date.now());
           setError(null);
         }
       } catch {
@@ -101,13 +124,34 @@ export function SessionView({
       cancelled = true;
       clearInterval(iv);
     };
-  }, [sessionId, isMock, router]);
+  }, [sessionId, isMock, mockDelta, router]);
 
   // Tick 1s cho countdown.
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(iv);
   }, []);
+
+  // Restore voucher đã nhận khi reload (T3-5) — chỉ real (mock dùng `?voucher=`).
+  useEffect(() => {
+    if (isMock) return;
+    try {
+      const v = readClaimedVoucher(window.sessionStorage);
+      if (v) setClaimedVoucher(v);
+    } catch {
+      /* sessionStorage không khả dụng → bỏ qua */
+    }
+  }, [isMock]);
+
+  // Lưu session_id để mở /session không `?id=` vẫn resume được (T5-1, qua ResumeGate).
+  useEffect(() => {
+    if (isMock) return;
+    try {
+      writeStoredSessionId(window.sessionStorage, sessionId);
+    } catch {
+      /* sessionStorage không khả dụng → bỏ qua */
+    }
+  }, [isMock, sessionId]);
 
   const phase = status?.phase;
 
@@ -161,6 +205,15 @@ export function SessionView({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [isMock, sessionId]);
 
+  // T3-5: đã nhận voucher (vừa claim HOẶC restore reload) → coupon, ưu tiên cao nhất.
+  if (claimedVoucher) {
+    return (
+      <Shell>
+        <VoucherScreen code={claimedVoucher} />
+      </Shell>
+    );
+  }
+
   if (!status) {
     return (
       <Shell>
@@ -171,11 +224,11 @@ export function SessionView({
     );
   }
 
-  const liveDelta = computeLiveDelta(
-    status.delta_seconds,
-    fetchTime || now,
-    now || fetchTime,
-  );
+  // Countdown từ mốc đã resync (anchor) → mượt; fallback serverDelta nếu chưa có anchor.
+  const liveDelta =
+    startEpochRef.current !== null
+      ? elapsedSince(startEpochRef.current, now)
+      : status.delta_seconds;
   const clock = mounted ? formatMMSS(CLAIM_OPEN - liveDelta) : "--:--";
   const passed = Boolean(status.sub_quest_passed) || localPassed;
 
@@ -192,6 +245,36 @@ export function SessionView({
     }
     if (r.ok && r.valid) setLocalPassed(true);
     return r;
+  };
+
+  // Bypass mã nhân viên khi GPS lỗi (T3-3). Real: verifyBypass (constant-time server).
+  // Mock dev: mã "1234" hợp lệ (KHÔNG gọi server, env có thể vắng ở local).
+  const handleBypass: BypassFn = async (code) => {
+    if (isMock) {
+      return { ok: true, valid: code.trim() === "1234" };
+    }
+    return verifyBypass(code);
+  };
+
+  // Claim voucher (T3-4): presence GPS/bypass → claimVoucher (verify presence + RPC atomic).
+  // Mock dev: coi như hợp lệ → trả mã demo (không gọi server).
+  const handleClaim: ClaimFn = async (presence) => {
+    if (isMock) {
+      return { ok: true, code: "OPR-DEMO-2026" };
+    }
+    return claimVoucher(sessionId, presence);
+  };
+
+  // Claim thành công (T3-5): lưu sessionStorage (restore khi reload) + chuyển sang VoucherScreen.
+  const handleClaimed = (code: string) => {
+    if (!isMock) {
+      try {
+        writeClaimedVoucher(window.sessionStorage, code);
+      } catch {
+        /* sessionStorage không khả dụng → vẫn hiện voucher trong phiên hiện tại */
+      }
+    }
+    setClaimedVoucher(code);
   };
 
   // status cuối ưu tiên hơn phase (đã nhận thưởng / hết hạn).
@@ -233,7 +316,13 @@ export function SessionView({
         )}
         {status.phase === 3 && <Meditation />}
         {status.phase === "CLAIMABLE" && (
-          <Placeholder label="🎁 Giờ Vàng — Nhận thưởng (T3-1)" />
+          // T3-1 hiển thị nút · T3-2 GPS · T3-3 bypass · T3-4 claimVoucher (onClaim).
+          <ClaimPanel
+            view={deriveClaimView(status, passed)}
+            onClaim={handleClaim}
+            onBypass={handleBypass}
+            onClaimed={handleClaimed}
+          />
         )}
       </div>
     </Shell>
@@ -271,14 +360,6 @@ function PhaseHeader({ phase, clock }: { phase: SessionPhase; clock: string }) {
       <p className="mt-1 text-xs opacity-70">
         {phase === "CLAIMABLE" ? "Đã đến giờ nhận thưởng" : "đến khi mở quà"}
       </p>
-    </div>
-  );
-}
-
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div className="mx-auto flex h-40 max-w-xs items-center justify-center rounded-md border border-dashed border-white/40 px-4 text-center text-sm opacity-80">
-      {label}
     </div>
   );
 }

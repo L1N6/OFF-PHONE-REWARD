@@ -6,12 +6,12 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-04 (Session 14 — T2-5 visibilitychange ✅; npm test 34/0/1-skip, Docker log_infraction 3/3, curl POST 400 OK. **MVP qua 50%**)
-Task đang làm: T2-6 — Clock sync (deps T2-1 ✓ + T2-2 ✓ — buildable; 2/3 checklist đã có nhờ T2-2)
-Bước tiếp theo: `app/_components/SessionView.tsx` — 2 mục đầu đã xong (fetchTime ghi khi nhận response + countdown `serverDelta+(Date.now()-fetchTime)/1000`). Còn: **resync smooth** — khi poll mới về, nếu |serverDelta − displayedDelta| < 5s thì nội suy mượt (ease) thay vì nhảy số; lệch ≥5s thì snap. Tránh countdown giật mỗi 30s.
-Task kế tiếp : T3-1 — CLAIM button logic (deps T2-1 ✓) → mở Phase 3 luồng nhận thưởng
-⚠️ Treo: **Apply `supabase/schema.sql`** (thêm `log_infraction`) → infraction ghi prod + live test 35/0/0. **Commit/push T2-3→T2-5** (chưa lên GitHub từ `932530a`). (✅ T0-4 · ✅ D-017.)
-MVP tiến độ  : 13 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-05 (Session 25 — T5-3 Loading + error states ✅; npm test **83/0/1**, tsc/lint/build ✅. **Phase 5 = 3/4** — chỉ còn T5-4 smoke test)
+Task đang làm: T5-4 — Smoke test end-to-end (deps: tất cả task trên) → task MVP CUỐI CÙNG
+Bước tiếp theo: Chạy smoke E2E (ưu tiên qua các test/render đã có + 1 lượt thủ công): QR→landing <3s · START→session tạo DB (createSession live test ✓) · phase transitions (mock=120/1500/2200/2750) · Blind Box nhập đúng/sai (validate_sub_quest test ✓) · GPS claim + bypass (claimVoucher live race ✓) · voucher hiển thị (VoucherScreen render ✓) · POS validate ✅ + double-redeem block ❌ (validate_voucher Docker 6/6 ✓). T5-4 = checklist xác nhận toàn luồng + ghi lại bằng chứng; cân nhắc 1 test E2E gộp (createSession→backdate claimable→claimVoucher→validateVoucher→USED) nếu muốn 1 lượt tự động. **Cần user apply schema.sql (validate_voucher) để chạy live cuối.**
+Task kế tiếp : (HẾT MVP 🟢) → Fast-follow 🟡 hoặc deploy pilot
+⚠️ Treo: **Commit/push T2-6 + T3-1..T3-5 + T4-* + T5-1..T5-3** (chưa lên GitHub từ `b008e4e` — S15–S25). ⚠️ **schema.sql đổi (validate_voucher) → user APPLY lại Supabase**. (✅ T0-4 live · ✅ D-017.)
+MVP tiến độ  : 24 / 25 tasks hoàn thành
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -21,11 +21,11 @@ MVP tiến độ  : 13 / 25 tasks hoàn thành
 |---|---|---|---|
 | Phase 0: Setup | 4 | 4 | 100% |
 | Phase 1: Session Auth | 3 | 3 | 100% |
-| Phase 2: Timer, Phases & Blind Box | 7 | 6 | 86% |
-| Phase 3: Claim & Voucher | 5 | 0 | 0% |
-| Phase 4: POS Validation | 2 | 0 | 0% |
-| Phase 5: Polish | 4 | 0 | 0% |
-| **Tổng MVP** | **25** | **13** | **52%** |
+| Phase 2: Timer, Phases & Blind Box | 7 | 7 | 100% |
+| Phase 3: Claim & Voucher | 5 | 5 | 100% |
+| Phase 4: POS Validation | 2 | 2 | 100% |
+| Phase 5: Polish | 4 | 3 | 75% |
+| **Tổng MVP** | **25** | **24** | **96%** |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -467,6 +467,311 @@ MVP tiến độ  : 13 / 25 tasks hoàn thành
 
 **Task tiếp theo:** T2-6 — Clock sync (deps T2-1 ✓ + T2-2 ✓)
 **Bước tiếp theo:** 2/3 checklist đã có nhờ T2-2 (fetchTime + computeLiveDelta). Còn **resync smooth**: poll mới về, |serverDelta − displayedDelta| < 5s → nội suy mượt thay vì nhảy; ≥5s → snap. (Tránh countdown giật mỗi 30s.)
+
+### Session 15 — 2026-06-04 — T2-6 Clock sync
+**Task:** T2-6 — Clock sync  |  **Kết quả:** ✅  (Phase 2 hoàn tất 7/7)
+
+**Bối cảnh:** User đã apply `log_infraction` lên Supabase → `npm test` giờ **39/0/0** (đóng skip Session 14; tất cả 4 live RPC pass).
+
+**Files tạo/sửa:**
+- `lib/sessionStatus.ts` — THÊM `reconcileStartEpoch(prev, serverDelta, fetchTimeMs, snapMs=5000, ease=0.34)`: anchor mốc bắt đầu phiên (client-clock ms). `candidate=fetchTime-serverDelta*1000`; lần đầu (null)→candidate; |drift|<snapMs→EASE (prev+drift*ease); ≥snapMs→SNAP. + `elapsedSince(startEpoch, now)`. Pure.
+- `app/_components/SessionView.tsx` — SỬA: bỏ state `fetchTime` → `startEpochRef` (useRef); poll resync `startEpochRef.current = reconcileStartEpoch(...)`; countdown `elapsedSince(startEpochRef.current, now)` thay `computeLiveDelta` → KHÔNG giật mỗi poll. Mock set epoch từ mockDelta. `mockDelta` vào deps poll-effect (lint).
+- `test/sessionStatus.test.ts` — THÊM 5 test (reconcileStartEpoch: first/ease/snap×2 + elapsedSince).
+
+**Test results:**
+- `npm test` → ✅ **39 PASS / 0 FAIL / 0 SKIP** (4 live RPC: get_session_status, validate_sub_quest, get_active_quests, log_infraction — đều pass). tsc 0 · lint clean · build ✅ (`/session` 4.92 kB).
+- **Render (next dev mock):** mock=120 (phase1) / 2200 (phase3) / 2750 (CLAIMABLE) đều HTTP 200, không crash; countdown gate "--:--" (SSR) đúng; CLAIMABLE không có countdown (đúng).
+
+**Quyết định kỹ thuật (ADR):**
+- **Anchor "startEpoch" thay (serverDelta, fetchTime) trực tiếp.** computeLiveDelta snap 100% mỗi poll → giật khi lệch (clock drift / latency). `reconcileStartEpoch` ease 34% khi lệch <5s (mượt qua vài poll) / snap khi ≥5s (sai nhiều → nhảy đúng). Display-only → Invariant #1 giữ nguyên (phase + nguồn thời gian vẫn server-delta).
+- **`startEpochRef` = useRef** (không state) → cập nhật không gây re-render thừa; tick `now` (state 1s) + setStatus (poll) drive re-render → correction áp ngay khi poll.
+- **Giữ `computeLiveDelta`** trong lib (vẫn export + test) dù app không dùng nữa — helper hợp lệ, không xoá (tránh phá test cũ).
+
+**Vấn đề gặp phải:**
+- lint exhaustive-deps: mock branch dùng `mockDelta` → thêm vào deps poll-effect (stable prop, không gây re-run thừa).
+
+**Task tiếp theo:** T3-1 — CLAIM button logic (deps T2-1 ✓) → mở Phase 3
+**Bước tiếp theo:** Thay placeholder CLAIMABLE bằng nút CLAIM thật — hiện khi `claim_window_open && sub_quest_passed`; trong window chưa pass quest → nhắc Blind Box; `claim_window_expired` → message + link landing; nút to/nổi bật. Hành động claim (GPS/bypass/claim_voucher) là T3-2→T3-4.
+
+### Session 16 — 2026-06-04 — T3-1 CLAIM button logic
+**Task:** T3-1 — CLAIM button logic  |  **Kết quả:** ✅  (mở Phase 3 — luồng nhận thưởng)
+
+**Bối cảnh:** T3-1 = CHỈ LOGIC HIỂN THỊ nút CLAIM. Hành động claim THẬT (GPS → bypass → RPC `claim_voucher`) là T3-2..T3-4. Vào session: working tree còn T2-6 (clock sync) chưa commit từ `b008e4e`.
+
+**Files tạo/sửa:**
+- `lib/sessionStatus.ts` — THÊM type `ClaimView` + pure `deriveClaimView(status, passed)` → `CLAIM|NEED_QUEST|EXPIRED|NONE`. Ưu tiên EXPIRED > (open ? CLAIM/NEED_QUEST) > NONE. `claim_window_open` đã tự gate `status='RUNNING'` (COMPLETED/FAILED → NONE). Display-only (Invariant #1 giữ: nguồn thời gian vẫn server-delta).
+- `app/_components/ClaimPanel.tsx` — TẠO (`"use client"`): render theo `view` — CLAIM (nút amber `rounded-2xl text-2xl font-extrabold shadow`, CTA to/nổi bật) / NEED_QUEST (nhắc hoàn thành Blind Box) / EXPIRED (message + link `/`). `onClaim?` là seam T3-2 (để TRỐNG ở T3-1 → bấm hiện "đang chuẩn bị" + ghi chú bước GPS sẽ có sau).
+- `app/_components/SessionView.tsx` — SỬA: import `deriveClaimView` + `ClaimPanel`; phase CLAIMABLE: `Placeholder` → `<ClaimPanel view={deriveClaimView(status, passed)} />` (XOÁ hàm `Placeholder` không còn dùng); thêm prop `mockPassed` (mặc định false) cho mock status.
+- `app/session/page.tsx` — SỬA: thêm `?passed=1` (dev-only, gate `NODE_ENV≠production` như `mock`) → `mockPassed` để verify nút CLAIM offline.
+- `test/sessionStatus.test.ts` — THÊM 6 test `deriveClaimView` (CLAIM, NEED_QUEST, optimistic passed override, EXPIRED-ưu-tiên, NONE phase 1/2/3, COMPLETED→NONE).
+
+**Test results:**
+- `npm test` → ✅ **45 PASS / 0 FAIL / 0 SKIP** (+6 deriveClaimView; 4 live RPC: get_session_status, validate_sub_quest, get_active_quests… vẫn pass). tsc 0 · lint clean · build ✅ (`/session` 5.31 kB).
+- **Render thật (next dev mock):** `mock=2750&passed=1` → CLAIM ("Giờ Vàng"/"NHẬN VOUCHER"/"45 phút gác máy"); `mock=2750` → NEED_QUEST ("Sắp xong"/"Blind Box"); `mock=3000` → EXPIRED ("hết hạn"/"48 phút"); `mock=120` → Pha 1 — tất cả HTTP 200.
+
+**Quyết định kỹ thuật (ADR):**
+- **Tách pure `deriveClaimView` → lib (test offline mọi nhánh) + ClaimPanel presentational** — đúng pattern dự án (logic ở lib, React verify qua build+render). EXPIRED ưu tiên cao nhất (dù trong CLAIMABLE phase nó không kích hoạt vì `derivePhase>2880` đã ra EXPIRED + màn EXPIRED upstream bắt trước — giữ defensive cho hàm hoàn chỉnh).
+- **`passed` effective = `status.sub_quest_passed || localPassed`** (optimistic, đã có sẵn ở SessionView) truyền vào deriveClaimView → nút CLAIM mở ngay khi vừa pass quest, không chờ poll.
+- **`onClaim` để TRỐNG ở T3-1** (optional prop) → không tạo hành vi giả; bấm chỉ hiện "đang chuẩn bị". T3-2 ráp GPS vào đây. Tránh empty-function (không pass prop thay vì `() => {}`).
+- **Mock `?passed=1`** thêm vào để verify CLAIM offline (mock mặc định `sub_quest_passed=false` để test Blind Box — không thể thấy CLAIM nếu không có cờ này). Dev-only, vô hại prod.
+
+**Vấn đề gặp phải:**
+- `codegraph_explore` trả source = Read-equivalent nhưng Edit tool vẫn đòi Read thật trước khi sửa → phải Read file lại trước Edit (codegraph để ĐỊNH VỊ + đọc, Edit cần Read riêng).
+- Xoá `Placeholder` (không còn ai dùng sau khi thay CLAIMABLE) để lint `no-unused-vars` không báo.
+
+**Task tiếp theo:** T3-2 — GPS coordinate capture (deps T3-1 ✓)
+**Bước tiếp theo:** Wire `ClaimPanel onClaim` → `navigator.geolocation.getCurrentPosition({enableHighAccuracy:true, timeout:10000})`; loading "Đang lấy vị trí…"; OK → claimVoucher (T3-4); PERMISSION_DENIED/TIMEOUT/UNAVAILABLE → fallback bypass (T3-3); accuracy>100m → warning vẫn tiếp tục.
+
+### Session 17 — 2026-06-04 — T3-2 GPS coordinate capture
+**Task:** T3-2 — GPS coordinate capture  |  **Kết quả:** ✅  (Phase 3 = 2/5)
+
+**Bối cảnh:** Chuỗi claim THẬT bắt đầu. T3-2 = bắt toạ độ FE; Haversine + cấp voucher là T3-4 (server), bypass là T3-3. ClaimPanel (T3-1) có nút CLAIM với `onClaim` để trống → nay thay bằng luồng GPS thật.
+
+**Files tạo/sửa:**
+- `lib/geolocation.ts` — TẠO (lõi injectable, test offline): `getPosition(geo, GEO_OPTIONS)` → `Promise<GeoResult>` (LUÔN resolve, không reject → UI map 1 nhánh) + `classifyGeoError(code)` (1→PERMISSION_DENIED, 2→UNAVAILABLE, 3→TIMEOUT) + const `GEO_OPTIONS{enableHighAccuracy:true,timeout:10000,maximumAge:0}` + `ACCURACY_WARN_M=100`. Kiểu `GeoLike`/`GeoOptions` tối thiểu (không phụ thuộc DOM lib → mock dễ; `navigator.geolocation` khớp cấu trúc).
+- `app/_components/ClaimPanel.tsx` — VIẾT LẠI nhánh CLAIM: bỏ stub `onClaim`/`claiming` (T3-1) → state machine `idle → locating → located | geo_error`. Nút "🎁 NHẬN VOUCHER" → `getPosition(navigator.geolocation)`; locating "📍 Đang lấy vị trí…"; located → "✅ ±{accuracy}m" + (lowAccuracy → ⚠️ cảnh báo vẫn tiếp tục) + gọi `onLocated({lat,lng})` (seam T3-4); geo_error → message theo reason (`GEO_MESSAGE`) + nút "Thử lại" + placeholder bypass (seam T3-3). Prop đổi `onClaim?`→`onLocated?`. EXPIRED/NEED_QUEST giữ nguyên.
+- `test/geolocation.test.ts` — TẠO: 9 test (classifyGeoError 4 mã · GEO_OPTIONS spec · success ≤100m lowAccuracy=false · >100m=true · biên 100=false · DENIED/TIMEOUT/UNAVAILABLE · undefined→UNSUPPORTED).
+
+**Test results:**
+- `npm test` → ✅ **54 PASS / 0 FAIL / 0 SKIP** (+9 geolocation; 4 live RPC vẫn pass). tsc 0 · lint clean · build ✅ (`/session` 5.95 kB).
+- **Render thật (next dev mock):** `mock=2750&passed=1` → nút "NHẬN VOUCHER" (idle); `mock=2750`→NEED_QUEST; `mock=3000`→EXPIRED; `mock=120`→Pha 1 — đều HTTP 200. (Các state locating/located/geo_error cần click browser → cover bằng 9 unit test + build, như pattern T2-4 audio.)
+
+**Quyết định kỹ thuật (ADR):**
+- **`getPosition` LUÔN resolve `GeoResult` (không reject)** → UI chỉ cần `if (r.ok)` thay vì try/catch + classify rải rác. Lỗi gói thành `reason` rời rạc (4 loại).
+- **Kiểu `GeoLike`/`GeoOptions` tự định nghĩa tối thiểu** (không dùng DOM `Geolocation`/`PositionOptions`) → mock trong node:test không cần jsdom; `navigator.geolocation` vẫn truyền thẳng được (structural typing). Cùng triết lý "lõi injectable, test offline" của useGuestToken/sessionStatus.
+- **accuracy > 100m KHÔNG chặn** — set `lowAccuracy=true`, vẫn `located` + gọi `onLocated` (claim tiếp). Chỉ cảnh báo UI (checklist: "warning nhưng vẫn tiếp tục"). GPS indoor sai số lớn là nợ D-003 (có bypass).
+- **KHÔNG lưu toạ độ** (specs §4 Module 3): coords chỉ truyền qua `onLocated` rồi discard; `located` state chỉ giữ `accuracy` để hiển thị.
+- **geo_error là seam T3-3:** placeholder "nhập mã nhân viên" + nút "Thử lại" → T3-3 thay placeholder bằng input bypass.
+
+**Vấn đề gặp phải:**
+- Không có lỗi. (Lo ngại `Geolocation` không assignable vào `GeoLike` do variance → dùng interface tối thiểu, tsc PASS ngay.)
+- State GPS tương tác (locating/located/error) không curl-verify được (cần click) → 9 unit test `getPosition` cover logic + build cover compile.
+
+**Task tiếp theo:** T3-3 — Manual bypass fallback (deps T3-2 ✓) 🟢 MVP static code
+**Bước tiếp theo:** Thay placeholder ở `geo_error` của ClaimPanel bằng input nhập mã → Server Action so sánh `CASHIER_BYPASS_CODE` (env) bằng constant-time (`crypto.timingSafeEqual`); đúng → claim tiếp (T3-4); sai → lỗi thân thiện không reveal lý do.
+
+### Session 18 — 2026-06-05 — T3-3 Manual bypass fallback
+**Task:** T3-3 — Manual bypass fallback 🟢 (MVP static code)  |  **Kết quả:** ✅  (Phase 3 = 3/5)
+
+**Bối cảnh:** Fallback khi GPS (T3-2) lỗi. ClaimPanel nhánh `geo_error` đã chừa sẵn placeholder bypass → nay thay bằng form nhập mã + verify constant-time server-side.
+
+**Files tạo/sửa:**
+- `lib/bypass.ts` — TẠO: `safeEqual(a,b)` constant-time = hash SHA-256 cả hai (`node:crypto`) về 32 byte RỒI `timingSafeEqual`. Hash trước → không throw khi lệch độ dài + không leak độ dài/vị trí ký tự sai. Server-only.
+- `actions/verifyBypass.ts` — TẠO (`"use server"`): `verifyBypass(code)` đọc env `CASHIER_BYPASS_CODE` (server-only) → `{ok:true,valid}` (mã sai/rỗng → valid:false) | `{ok:false,error:"SERVER_ERROR"}` (chưa set env). Trim input.
+- `app/_components/ClaimPanel.tsx` — SỬA: thêm prop `onBypass?: BypassFn` + state `bypass_ok`; nhánh `geo_error` render `<BypassForm>` (input "Mã nhân viên" inputMode=numeric + nút "Xác nhận") → `onBypass`; đúng → `bypass_ok` (seam T3-4); sai HOẶC lỗi → CÙNG message "❌ Mã không đúng, thử lại nhé" (không reveal lý do). Export type `BypassFn`.
+- `app/_components/SessionView.tsx` — SỬA: import `verifyBypass` + type `BypassFn`; thêm `handleBypass` (real verifyBypass / mock dev "1234"); truyền `onBypass={handleBypass}` vào ClaimPanel.
+- `test/bypass.test.ts` — TẠO: 7 test (safeEqual: giống/khác/lệch-độ-dài-không-throw/case-sensitive; verifyBypass: đúng+trim / sai+rỗng / chưa-set-env — dùng `withEnv` save-restore để không lệ thuộc .env.local).
+
+**Test results:**
+- `npm test` → ✅ **61 PASS / 0 FAIL / 0 SKIP** (+7 bypass; 4 live RPC vẫn pass). tsc 0 · lint clean · build ✅ (`/session` 6.3 kB).
+- **Render thật (next dev mock):** `mock=2750&passed=1`→CLAIM "NHẬN VOUCHER" · `mock=2750`→NEED_QUEST · `mock=3000`→EXPIRED đều 200. (Form bypass ở state `geo_error` cần GPS-fail click → cover bằng 7 unit test + build, như pattern T2-4/T3-2.)
+
+**Quyết định kỹ thuật (ADR):**
+- **Constant-time = hash-rồi-`timingSafeEqual`** (không so trực tiếp): `timingSafeEqual` throw nếu lệch độ dài → hash SHA-256 về cùng 32 byte trước → an toàn độ dài + không exception. Pattern chuẩn cho so sánh secret độ dài tuỳ ý.
+- **`verifyBypass` chỉ là UX feedback tức thì — KHÔNG phải cổng bảo mật cuối.** Ghi rõ trong doc: **T3-4 `claimVoucher` PHẢI re-verify mã server-side** (`safeEqual`) trước RPC; không tin cờ "đã verify" từ client (client có thể giả). Presence (GPS/bypass) là điều kiện claim → phải check ở action cấp voucher.
+- **Mã sai vs lỗi server → cùng một message** ("Mã không đúng, thử lại nhé") để không reveal (specs §4 Module 3 "không reveal lý do"). `valid:false` không kèm lý do.
+- **`lib/bypass.ts` (node:crypto) chỉ import bởi server action + test** → KHÔNG vào client bundle (ClaimPanel chỉ import type `BypassFn`). build xác nhận.
+- **Mock dev "1234"** (giống Blind Box) cho `handleBypass` — local có thể vắng env, mock không gọi server.
+
+**Vấn đề gặp phải:**
+- Không có lỗi. `withEnv` save/restore cần thiết vì `npm test` nạp `.env.local` (`--env-file-if-exists`) có thể đã set `CASHIER_BYPASS_CODE` → test phải tự kiểm soát env để deterministic.
+
+**Task tiếp theo:** T3-4 — claimVoucher Server Action (deps T0-3 ✓, T3-2 ✓, T3-3 ✓)
+**Bước tiếp theo:** `actions/claimVoucher.ts` — presence GPS (Haversine `lib/haversine.ts` mới, test điểm biết trước, so `venue.radius_meters`) HOẶC bypass (re-verify `safeEqual`) → RPC `claim_voucher` (đã có §2). Map lỗi RPC thân thiện. Wire `onLocated`/`bypass_ok` của ClaimPanel → claimVoucher. **Test race 2 request → 1 voucher.**
+
+### Session 19 — 2026-06-05 — T3-4 claimVoucher Server Action
+**Task:** T3-4 — claimVoucher Server Action (qua RPC claim_voucher)  |  **Kết quả:** ✅  (Phase 3 = 4/5)
+
+**Bối cảnh:** Khâu nguyên tử cuối luồng claim. RPC `claim_voucher` (out_code/out_error) + bảng venues (latitude/longitude/radius_meters) đã có sẵn schema từ T0-3 → session này chỉ viết Server Action + Haversine + wire UI + test race.
+
+**Files tạo/sửa:**
+- `lib/haversine.ts` — TẠO (pure): `haversineMeters(lat1,lng1,lat2,lng2)` (R=6371km, clamp √a≤1). Test offline 5 điểm biết trước.
+- `lib/claim.ts` — TẠO: shared types `ClaimPresence` (`{lat,lng}` | `{bypassCode}`), `ClaimError`, `ClaimVoucherResult` — client+server cùng dùng (pure, không runtime).
+- `actions/claimVoucher.ts` — TẠO (`"use server"`): validate sessionId/venueId → `verifyPresence` (helper nội bộ, KHÔNG export): bypass → re-verify `safeEqual` env (KHÔNG tin client); GPS → đọc `venues.latitude/longitude/radius_meters` → Haversine ≤ radius (toạ độ discard). → RPC `claim_voucher(session_id, venue_id)` → map out_error (QUEST_NOT_PASSED/OUTSIDE_WINDOW/SESSION_NOT_RUNNING/POOL_EMPTY/SESSION_NOT_FOUND→INVALID_SESSION). Thành công → `{ok:true, code}`.
+- `app/_components/ClaimPanel.tsx` — VIẾT LẠI luồng CLAIM: state `idle→locating→claiming→claimed | need_bypass | claim_error`. GPS ok → `runClaim({lat,lng})`; GPS fail HOẶC claim trả PRESENCE_FAILED (ngoài radius) → `need_bypass` (form mã, `onBypass` verify tức thì → đúng → `runClaim({bypassCode})`). `claimed` → component `<Claimed>` hiện mã voucher (mono, select-all) — T3-5 làm coupon + lưu sessionStorage. Prop `onClaim: ClaimFn` (+ giữ `onBypass`). Bỏ `onLocated`.
+- `app/_components/SessionView.tsx` — SỬA: import `claimVoucher` + type `ClaimFn`; `handleClaim` (real `claimVoucher(sessionId, presence)` / mock demo code "OPR-DEMO-2026"); truyền `onClaim={handleClaim}` vào ClaimPanel.
+- `test/haversine.test.ts` — TẠO: 5 test (cùng điểm=0, 1° lat/lng ≈111.19km, đối xứng, ~11m).
+- `test/claimVoucher.test.ts` — TẠO: 1 offline (INVALID_SESSION) + 1 **LIVE RACE** (tạo phiên → set claimable backdate 2750s + sub_quest_passed → 2 claimVoucher GPS đồng thời → assert cùng code + count=1 voucher + COMPLETED + claim lại idempotent; cleanup nhả voucher rồi xoá session, token `0f0f…ff`).
+
+**Test results:**
+- `npm test` → ✅ **68 PASS / 0 FAIL / 0 SKIP**. **Live race PASS** ("race 2 request đồng thời cùng session → đúng 1 voucher", 3440ms). 5 live RPC vẫn pass. tsc 0 · lint clean · build ✅.
+- **Render thật (next dev mock):** mock=2750&passed=1 → nút "NHẬN VOUCHER"; các view khác 200. (claiming/claimed/need_bypass cần browser GPS → cover bằng unit + live race + build.)
+
+**Quyết định kỹ thuật (ADR):**
+- **Presence check Ở SERVER ACTION (claimVoucher), KHÔNG tin client.** Bypass re-verify `safeEqual` (dù T3-3 đã verifyBypass cho UX — đây là cổng bảo mật thật); GPS Haversine so radius ở Node (specs §4 Module 3 đặt Haversine ở `lib/haversine.ts`, không trong SQL). Quyền cấp voucher + window vẫn nguyên tử trong RPC.
+- **GPS ngoài radius (PRESENCE_FAILED) → mời bypass** thay vì báo lỗi cứng (UX: GPS indoor sai số lớn — D-003). accuracy>100m (T3-2) KHÔNG chặn ở FE; nếu thật xa thì server PRESENCE_FAILED → bypass.
+- **Race test dùng presence GPS tại toạ độ venue** (distance 0) → khỏi phụ thuộc `CASHIER_BYPASS_CODE` trong .env.local. Cleanup phải NHẢ voucher (reset AVAILABLE) TRƯỚC khi xoá session (vouchers.session_id ON DELETE SET NULL → nếu xoá trước, voucher kẹt RESERVED ngoài pool).
+- **`lib/claim.ts` tách types** → client (ClaimPanel) + server (action) cùng import mà không kéo node:crypto/supabase vào client bundle.
+
+**Vấn đề gặp phải:**
+- Không có lỗi. Race test live thành công ngay (RPC FOR UPDATE + uniq_voucher_per_session đã proven từ T0-3, nay xác nhận qua Server Action thật).
+
+**Task tiếp theo:** T3-5 — Voucher display screen (deps T3-4 ✓)
+**Bước tiếp theo:** `claimed` → coupon đẹp + LƯU `claimed_voucher` sessionStorage (restore khi reload; COMPLETED screen đọc lại để hiện mã thay vì màn trống) + CTA "Thử lại ngày mai".
+
+### Session 20 — 2026-06-05 — T3-5 Voucher display screen
+**Task:** T3-5 — Voucher display screen  |  **Kết quả:** ✅  (**PHASE 3 HOÀN TẤT 5/5** — luồng nhận thưởng end-to-end)
+
+**Bối cảnh:** Đóng Phase 3. T3-4 để `claimed` hiện mã thô (inline trong ClaimPanel); T3-5 tách thành màn coupon riêng + lưu/restore sessionStorage để reload không mất voucher.
+
+**Files tạo/sửa:**
+- `lib/voucher.ts` — TẠO (pure/injectable): `readClaimedVoucher(storage)` / `writeClaimedVoucher(storage, code)` + const `CLAIMED_VOUCHER_KEY="claimed_voucher"`. Test offline (mock Storage = Map).
+- `app/_components/VoucherScreen.tsx` — TẠO: coupon mã font lớn monospace (text-3xl, select-all, break-all), viền dashed amber + 2 "lỗ vé" tròn hai bên, CTA "Thử lại ngày mai" (link `/`).
+- `app/_components/SessionView.tsx` — SỬA: state `claimedVoucher` (init `mockVoucher`); effect restore từ `sessionStorage` khi mount (non-mock); `handleClaimed(code)` lưu sessionStorage + setState; render `<VoucherScreen>` ƯU TIÊN CAO NHẤT (TRƯỚC `if(!status)` và COMPLETED/EXPIRED) → reload phiên đã COMPLETED vẫn hiện mã thay vì màn "Đã hoàn thành" trống; truyền `onClaimed={handleClaimed}` vào ClaimPanel. Prop mới `mockVoucher`.
+- `app/_components/ClaimPanel.tsx` — SỬA: prop `onClaimed?`; claim ok → gọi `onClaimed(r.code)` (parent swap VoucherScreen) + giữ setStep `claimed` (fallback standalone).
+- `app/session/page.tsx` — SỬA: thêm mock dev `?voucher=<code>` → `mockVoucher` (verify VoucherScreen offline).
+- `test/voucher.test.ts` — TẠO: 3 test (rỗng→null, round-trip, chuỗi rỗng/space→null).
+
+**Test results:**
+- `npm test` → ✅ **71 PASS / 0 FAIL / 0 SKIP** (+3 voucher; 5 live RPC + live race vẫn pass). tsc 0 · lint clean · build ✅.
+- **Render thật (next dev mock):** `mock=2750&voucher=OPR-TEST-1234` → "Nhận thưởng thành công" + "OPR-TEST-1234" + "Mã voucher" + "Thử lại ngày mai"; passed=1→CLAIM; mock=2750→NEED_QUEST; mock=120→Pha 1 — đều 200.
+
+**Quyết định kỹ thuật (ADR):**
+- **VoucherScreen render ƯU TIÊN CAO NHẤT ở SessionView** (trước cả `!status` và COMPLETED). Lý do: sau claim, session COMPLETED → reload, poll trả COMPLETED → màn "Đã hoàn thành" cũ TRỐNG (không có mã). Đọc `claimed_voucher` từ sessionStorage khi mount → hiện lại coupon. Phủ cả 2 ca: vừa claim (state set qua onClaimed) + reload (restore từ storage).
+- **Tách VoucherScreen khỏi ClaimPanel** (không để mỗi inline `<Claimed>`): vì restore reload phải render ở SessionView (ClaimPanel chỉ sống ở phase CLAIMABLE, không phải COMPLETED). ClaimPanel giữ `<Claimed>` làm fallback standalone (khi không truyền onClaimed) — không dead.
+- **Mock `?voucher=` dev-only** verify coupon offline; restore sessionStorage chỉ chạy real (mock không đọc storage → không nhiễu test phase khác).
+
+**Vấn đề gặp phải:**
+- Không có lỗi. Reload-restore tương tác (sessionStorage) verify bằng unit test `lib/voucher` + `?voucher=` render + reasoning (curl không giữ sessionStorage giữa request).
+
+**Task tiếp theo:** T4-1 — Cashier validation page (deps T0-1 ✓) → mở Phase 4
+**Bước tiếp theo:** `app/validate/page.tsx` mobile-first: input mã lớn + nút VALIDATE → `validateVoucher` (T4-2); 4 trạng thái (✅ hợp lệ / ❌ chưa claim / ⚠️ đã dùng / ❌ không hợp lệ); tự clear input. MOCK-FIRST trước.
+
+### Session 21 — 2026-06-05 — T4-1 Cashier validation page
+**Task:** T4-1 — Cashier validation page  |  **Kết quả:** ✅  (Phase 4 = 1/2 — mở Phase 4 POS Validation)
+
+**Bối cảnh:** Trang cho NHÂN VIÊN quầy (khác luồng khách). T4-1 = UI + MOCK (Invariant #7); validateVoucher action thật + RPC atomic là T4-2.
+
+**Files tạo/sửa:**
+- `lib/voucherValidation.ts` — TẠO (pure): types `VoucherResultStatus` (VALID/NOT_CLAIMED/USED/INVALID) + `ValidateVoucherResult` (client+server) + `describeVoucherResult` (→ banner {tone ok/warn/error, title, detail}) + `mockValidateVoucher` (map demo: USED/AVAIL/OPR-XXXX-XXXX/else). Test offline 5.
+- `app/validate/page.tsx` — TẠO (server shell + metadata title) → `<Validate>`.
+- `app/_components/Validate.tsx` — TẠO (`"use client"`, mobile-first max-w-md): input mã text-2xl mono (autoCapitalize, Enter-submit, autoFocus) + nút "KIỂM TRA" to; banner 4 trạng thái theo tone; hiện giờ REDEEMED (USED); **tự clear input** sau kiểm tra (finally). `const runValidate = mockValidateVoucher` (T4-1) → 1 dòng đổi sang action thật ở T4-2.
+- `test/voucherValidation.test.ts` — TẠO: 5 test (describeVoucherResult 4 tone + mockValidateVoucher map 4 trạng thái).
+
+**Test results:**
+- `npm test` → ✅ **76 PASS / 0 FAIL / 0 SKIP** (+5; 5 live RPC + race vẫn pass). tsc 0 · lint clean · build ✅ (`/validate` = ○ static 1.57 kB).
+- **Render thật (next dev):** `/validate` → HTTP 200 + "Kiểm tra voucher" / "KIỂM TRA" / placeholder "OPR-XXXX-XXXX" / "Nhập mã khách". (Banner kết quả cần click → cover bằng 5 unit test + build.)
+
+**Quyết định kỹ thuật (ADR):**
+- **Tách logic thuần `describeVoucherResult` + `mockValidateVoucher` ở lib** (test offline) — UI Validate.tsx mỏng. `ValidateVoucherResult` đặt ở lib để T4-2 action + client cùng dùng (như `lib/claim.ts`).
+- **MOCK-FIRST qua `const runValidate = mockValidateVoucher`** — T4-2 chỉ đổi 1 dòng import sang `validateVoucher` server action (không sửa logic UI). Khác `/session` (real+mock theo flag) vì `/validate` chưa có BE cho tới T4-2 → mock toàn phần tạm.
+- **Trang POS theme sáng (slate-50)** tách biệt luồng khách (teal gradient) — nhân viên dùng, không cần branding.
+- **Date format `toLocaleString('vi-VN')` cho redeemed_at = display-only** (không phải business time → không đụng Invariant #1).
+
+**Vấn đề gặp phải:**
+- Không có lỗi. Banner kết quả tương tác (click) không curl được → unit test `describeVoucherResult`/`mockValidateVoucher` + build phủ.
+
+**Task tiếp theo:** T4-2 — validateVoucher Server Action (deps T0-3 ✓, T4-1 ✓)
+**Bước tiếp theo:** RPC `validate_voucher` (UPDATE REDEEMED atomic + truy vấn phụ phân biệt AVAILABLE/REDEEMED/không-tồn-tại) + `actions/validateVoucher.ts` map → ValidateVoucherResult; đổi `runValidate` ở Validate.tsx sang action thật. **Test race double-redeem.** User apply schema.sql.
+
+### Session 22 — 2026-06-05 — T4-2 validateVoucher Server Action
+**Task:** T4-2 — validateVoucher Server Action  |  **Kết quả:** ✅  (**PHASE 4 HOÀN TẤT 2/2** — POS redeem đầy đủ)
+
+**Bối cảnh:** Đóng Phase 4. T4-1 dùng mock; T4-2 thêm RPC redeem atomic + action thật + wire. Docker daemon chạy → test SQL isolated (function chưa lên Supabase).
+
+**Files tạo/sửa:**
+- `supabase/schema.sql` — THÊM `validate_voucher(p_code, p_venue_id)` RETURNS (out_status, out_redeemed_at): UPDATE REDEEMED WHERE RESERVED + (expires_at NULL hoặc > NOW()) RETURNING → FOUND='VALID'; 0 dòng → truy vấn phụ: không tồn tại/hết-hạn→INVALID · AVAILABLE→NOT_CLAIMED · REDEEMED→USED(+redeemed_at). 1 RPC atomic. **CHƯA apply Supabase.**
+- `actions/validateVoucher.ts` — TẠO (`"use server"`): trim+UPPER code (khớp seed OPR-XXXX-XXXX hoa); rỗng→INVALID (không chạm DB); venue env; RPC → map `ValidateVoucherResult` (USED kèm redeemedAt).
+- `app/_components/Validate.tsx` — SỬA: `runValidate` từ `mockValidateVoucher` → `validateVoucher` thật (1 dòng, đúng kế hoạch MOCK-FIRST T4-1). `mockValidateVoucher` giữ lại (dùng trong test).
+- `supabase/tests/validate_voucher_test.sql` — TẠO: 6 nhánh (VALID+chuyển REDEEMED, double-redeem→USED, NOT_CLAIMED, USED, INVALID không-tồn-tại, INVALID hết-hạn không bị redeem). BEGIN/ROLLBACK.
+- `test/validateVoucher.test.ts` — TẠO: 1 offline (code rỗng→INVALID) + 1 live RACE (probe-skip; insert RESERVED → 2 validate đồng thời → đúng 1 VALID+1 USED + voucher REDEEMED + idempotent; cleanup code `ZZTEST-RACE`).
+
+**Test results:**
+- **Docker SQL (Postgres 16 isolated):** `validate_voucher` **6/6 PASS** ("validate_voucher_test: ALL PASS", exit 0) — gồm double-redeem + hết-hạn-không-redeem.
+- `npm test` → ✅ **77 PASS / 0 FAIL / 1 SKIP** (skip = live race tới khi apply schema). tsc 0 · lint clean · build ✅ (`/validate` ○ 1.61 kB).
+- **Render thật:** `/validate` HTTP 200 + shell OK sau khi wire action thật.
+
+**Quyết định kỹ thuật (ADR):**
+- **Redeem = 1 RPC atomic `UPDATE...WHERE status='RESERVED'...RETURNING`** → chống double-redeem KHÔNG cần lock thủ công: 2 request đồng thời chỉ 1 khớp 'RESERVED' (request kia thấy đã REDEEMED → 0 dòng → USED). Phân loại lý do (NOT_CLAIMED/USED/INVALID) bằng truy vấn phụ trong cùng function.
+- **RESERVED nhưng hết hạn → INVALID** (UPDATE không khớp do expires_at; sub-query rơi xuống nhánh cuối) — khớp specs "không tồn tại/hết hạn → ❌". Voucher giữ nguyên RESERVED (không redeem nhầm).
+- **Normalize code trim+UPPER ở action** (seed code viết HOA) → cashier gõ thường vẫn khớp. Validate.tsx cũng upper khi nhập.
+- **MOCK→real chỉ đổi 1 dòng** (`runValidate`) như thiết kế T4-1 — UI không đổi.
+
+**Vấn đề gặp phải (để session sau không vấp):**
+- SQL test lần đầu FAIL nhánh USED: fixture INSERT cột (…, expires_at) nhưng quên set `redeemed_at` cho 'TST-USED' → assert "USED phải có redeemed_at" trượt. **Lỗi FIXTURE, không phải function.** Fix: thêm cột `redeemed_at` vào INSERT (TST-USED = NOW()). → Khi seed voucher REDEEMED thủ công nhớ set redeemed_at.
+- tsc TS18047 `row possibly null` (`.single()`) → `row?.status` (pattern lặp từ S8/S10 — cứ `?.` cho `.single()`).
+- Docker: `docker run --name opr-pg postgres:16-alpine` + `docker cp` + `psql -f` (PowerShell không `< file`). pg_isready poll trước khi apply.
+
+**Task tiếp theo:** T5-1 — Session resume khi reload (deps T1-2 ✓, T2-2 ✓) → mở Phase 5 Polish
+**Bước tiếp theo:** Xác nhận reload `/session?id=` resume đúng phase (poll đã lo) · RUNNING→tiếp tục · COMPLETED→voucher (sessionStorage) hoặc /claim · EXPIRED→landing+message. Phần lớn đã có (T2-2/T3-5) — rà checklist T5-1 + đánh bóng/test còn thiếu.
+
+### Session 23 — 2026-06-05 — T5-1 Session resume khi reload
+**Task:** T5-1 — Session resume khi reload  |  **Kết quả:** ✅  (Phase 5 = 1/4 — mở Phase Polish)
+
+**Bối cảnh:** Resume cơ bản đã có (id ở URL + poll quyết phase từ T2-2; COMPLETED→voucher từ T3-5). Gap còn lại theo Context: mở `/session` KHÔNG `?id=` (reload/bookmark/mở lại app) phải khôi phục từ sessionStorage, KHÔNG tạo session mới.
+
+**Files tạo/sửa:**
+- `lib/sessionStore.ts` — TẠO (pure/injectable): `readStoredSessionId`/`writeStoredSessionId` + const `SESSION_ID_KEY="session_id"` (khớp Landing). Test offline 3.
+- `app/_components/ResumeGate.tsx` — TẠO (`"use client"`): /session không `?id=` → đọc sessionStorage; id hợp lệ → `router.replace('/session?id=<id>')` (resume, KHÔNG createSession) / không có → `router.replace('/')`. Hiện "Đang khôi phục phiên…".
+- `app/session/page.tsx` — SỬA: id SAI định dạng → redirect landing (như cũ); id VẮNG → `<ResumeGate>` (thay vì bounce thẳng); id hợp lệ → SessionView. Narrow `id: string` sau guard.
+- `app/_components/SessionView.tsx` — SỬA: effect lưu `session_id` vào sessionStorage mỗi khi mount (real) → mở thẳng /session?id=X cũng resume được sau.
+- `app/_components/Landing.tsx` — SỬA: dùng `writeStoredSessionId` (thay `setItem` thẳng) cho nhất quán.
+- `test/sessionStore.test.ts` — TẠO: 3 test (rỗng→null, round-trip, rỗng/space→null).
+
+**Test results:**
+- `npm test` → ✅ **80 PASS / 0 FAIL / 1 SKIP** (skip = validate_voucher live, chờ apply). tsc 0 · lint clean · build ✅ (`/session` 7.2 kB).
+- **Render thật (next dev):** `/session` (no id) → 200 + "Đang khôi phục phiên…" (ResumeGate, trước đây 307); `/session?id=not-a-uuid` → 307 landing (rác vẫn chặn); `/session?id=<uuid>&mock=120` → 200 "Pha 1" (không đổi).
+
+**Quyết định kỹ thuật (ADR):**
+- **ResumeGate tách riêng (không refactor prop SessionView).** /session?id= vẫn vào SessionView như cũ (sessionId luôn là string từ URL); chỉ ca KHÔNG id mới qua ResumeGate → redirect về dạng chuẩn `/session?id=`. Tránh đổi `sessionId: string` → `null` (sẽ phải guard mọi handler claim/validate). Cô lập thay đổi, không regress.
+- **Phân biệt id VẮNG vs id RÁC:** vắng → thử resume (ResumeGate); rác (sai UUID) → redirect landing thẳng (server) tránh vòng lặp. ResumeGate cũng validate stored bằng isValidUuid trước khi redirect.
+- **Resume KHÔNG tạo session mới** (Invariant #6): ResumeGate chỉ điều hướng tới id cũ; createSession chỉ chạy ở nút START. Phiên cũ RUNNING → poll resume; COMPLETED → voucher/done; EXPIRED → message.
+- **"COMPLETED → /claim" hiểu theo kiến trúc app:** không có route /claim riêng — voucher hiện ngay trong /session (VoucherScreen, T3-5) khi có `claimed_voucher`; COMPLETED không voucher → màn "Đã hoàn thành". Thoả ý "hiện kết quả thưởng khi resume".
+- **SessionView lưu session_id mỗi mount** → mở thẳng link /session?id=X (chia sẻ) cũng bật được resume sau này.
+
+**Vấn đề gặp phải:**
+- Không có lỗi. ResumeGate redirect là client-side (router.replace trong effect) → curl chỉ thấy shell "khôi phục" (200), không thấy 307 — đúng kỳ vọng (browser chạy effect mới điều hướng).
+
+**Task tiếp theo:** T5-2 — Edge case messages (deps T3-4 ✓, T1-2 ✓)
+**Bước tiếp theo:** Rà 3 ca: rate-limit (Landing đã có), pool-empty (ClaimPanel POOL_EMPTY), quest chưa pass (NEED_QUEST) — thống nhất câu chữ theo checklist T5-2; cân nhắc gom `lib/messages.ts`.
+
+### Session 24 — 2026-06-05 — T5-2 Edge case messages
+**Task:** T5-2 — Edge case messages  |  **Kết quả:** ✅  (Phase 5 = 2/4)
+
+**Bối cảnh:** Cả 3 message biên đã hiện hữu rải rác (rate-limit T1-3, quest-not-passed T3-1, pool-empty T3-4). T5-2 = gom 1 nguồn + đồng giọng + guard regression.
+
+**Files tạo/sửa:**
+- `lib/messages.ts` — TẠO: `MESSAGES` (rateLimited / poolEmpty / questNotPassedInWindow) plain text, 1 nguồn sự thật.
+- `app/_components/Landing.tsx` — SỬA: errorMessage RATE_LIMITED → `MESSAGES.rateLimited`.
+- `app/_components/ClaimPanel.tsx` — SỬA: `CLAIM_ERROR_MSG.POOL_EMPTY` → `MESSAGES.poolEmpty`; view NEED_QUEST detail → `MESSAGES.questNotPassedInWindow` (bỏ `<b>` inline → plain).
+- `test/messages.test.ts` — TẠO: 3 test guard nội dung chính (hôm nay/ngày mai · hết voucher/nhân viên · Blind Box).
+
+**Test results:**
+- `npm test` → ✅ **83 PASS / 0 FAIL / 1 SKIP**. tsc 0 · lint clean · build ✅.
+- **Render thật (next dev mock=2750):** NEED_QUEST → "Sắp xong" + "Blind Box" + "Sổ Người Lạ" (message centralized OK).
+
+**Quyết định kỹ thuật (ADR):**
+- **Gom vào `lib/messages.ts` thay vì sửa câu chữ tại chỗ** — 3 message vốn đã đúng ý checklist; giá trị T5-2 là DRY + đồng giọng + chống lệch về sau. Plain text (mất 1 `<b>` ở NEED_QUEST — chấp nhận, nội dung quan trọng hơn nhấn mạnh).
+- **Giữ giọng tiếng Việt** ("thử thách" thay vì literal "challenge" trong checklist) — UX tốt hơn, thoả ý.
+
+**Vấn đề gặp phải:**
+- Không có lỗi.
+
+**Task tiếp theo:** T5-3 — Loading + error states (deps tất cả task trên)
+**Bước tiếp theo:** `app/loading.tsx` (spinner/skeleton) + `app/error.tsx` (`"use client"` error boundary + nút reset). Rà unhandled promise rejection (actions/fetch đã try/catch).
+
+### Session 25 — 2026-06-05 — T5-3 Loading + error states
+**Task:** T5-3 — Loading + error states  |  **Kết quả:** ✅  (Phase 5 = 3/4 — chỉ còn T5-4 smoke test)
+
+**Files tạo/sửa:**
+- `app/loading.tsx` — TẠO: route-level loading (spinner `animate-spin` + "Đang tải…"), CSS var `foreground`.
+- `app/error.tsx` — TẠO (`"use client"`): root error boundary {error, reset} → "Có lỗi xảy ra" + nút "Thử lại" (`reset()`) + link "Về trang đầu"; `console.error` trong useEffect.
+- `app/_components/ClaimPanel.tsx` — SỬA: bọc `runClaim` trong try/catch (defensive — onClaim không reject nhưng phòng unhandled rejection).
+
+**Test results:**
+- `npm test` → ✅ **83 PASS / 0 FAIL / 1 SKIP**. tsc 0 · lint clean · `npm run build` ✓ (Next compile loading/error vào bundle).
+- **Render thật:** `/` · `/validate` · `/session?mock=120` đều HTTP 200 với error boundary đã thêm (không phá SSR thường).
+
+**Quyết định kỹ thuật (ADR):**
+- **loading/error ở ROOT `app/`** đủ cho MVP (áp mọi route) — không cần loading riêng từng segment. error.tsx phải `"use client"` (yêu cầu Next cho error boundary) + nhận `reset()`.
+- **Verify qua build + render route thường** (loading hiện lúc suspense, error lúc throw — khó curl trực tiếp; như T2-4 audio). Defensive try/catch runClaim đóng nốt nguồn unhandled rejection tiềm tàng duy nhất ở UI.
+- **Audit unhandled rejection:** mọi Server Action (create/validate/claim/verify) try/catch trả object; fetch poll + log-infraction + visibilitychange có `.catch`; BlindBox/BypassForm submit try/catch → sạch.
+
+**Vấn đề gặp phải:**
+- Không có lỗi.
+
+**Task tiếp theo:** T5-4 — Smoke test end-to-end (deps tất cả) → task MVP CUỐI
+**Bước tiếp theo:** Checklist E2E toàn luồng (landing→START→phases→Blind Box→claim GPS/bypass→voucher→POS validate + double-redeem block) — gom bằng chứng từ test/render đã có; cân nhắc 1 test E2E gộp. Cần user apply schema.sql cho live cuối.
 
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)
