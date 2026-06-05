@@ -6,12 +6,12 @@
 ═══════════════════════════════════════════════
 <!-- Claude cập nhật block này sau MỖI session -->
 
-Cập nhật    : 2026-06-05 (Session 25 — T5-3 Loading + error states ✅; npm test **83/0/1**, tsc/lint/build ✅. **Phase 5 = 3/4** — chỉ còn T5-4 smoke test)
-Task đang làm: T5-4 — Smoke test end-to-end (deps: tất cả task trên) → task MVP CUỐI CÙNG
-Bước tiếp theo: Chạy smoke E2E (ưu tiên qua các test/render đã có + 1 lượt thủ công): QR→landing <3s · START→session tạo DB (createSession live test ✓) · phase transitions (mock=120/1500/2200/2750) · Blind Box nhập đúng/sai (validate_sub_quest test ✓) · GPS claim + bypass (claimVoucher live race ✓) · voucher hiển thị (VoucherScreen render ✓) · POS validate ✅ + double-redeem block ❌ (validate_voucher Docker 6/6 ✓). T5-4 = checklist xác nhận toàn luồng + ghi lại bằng chứng; cân nhắc 1 test E2E gộp (createSession→backdate claimable→claimVoucher→validateVoucher→USED) nếu muốn 1 lượt tự động. **Cần user apply schema.sql (validate_voucher) để chạy live cuối.**
-Task kế tiếp : (HẾT MVP 🟢) → Fast-follow 🟡 hoặc deploy pilot
-⚠️ Treo: **Commit/push T2-6 + T3-1..T3-5 + T4-* + T5-1..T5-3** (chưa lên GitHub từ `b008e4e` — S15–S25). ⚠️ **schema.sql đổi (validate_voucher) → user APPLY lại Supabase**. (✅ T0-4 live · ✅ D-017.)
-MVP tiến độ  : 24 / 25 tasks hoàn thành
+Cập nhật    : 2026-06-05 (Session 26 — T5-4 Smoke E2E ✅; npm test **84/0/1** — E2E live PASS, 6 live RPC. 🎉 **MVP HOÀN TẤT 25/25 — 100%**)
+Task đang làm: (HẾT MVP 🟢) — chờ user quyết hướng tiếp: deploy pilot / Fast-follow 🟡 / V2 🔵
+Bước tiếp theo: 2 việc vận hành đang treo (cần user): (1) **APPLY `schema.sql`** lên Supabase SQL Editor (thêm `validate_voucher`) → `/validate` chạy prod + đóng skip live cuối (npm test → 85/0/0). (2) **`git push`** lên GitHub (`a175cc9` + commit S26) → Vercel auto-deploy. Sau đó: Fast-follow TF-1..TF-5 (OTP động, 3-lớp rate-limit, cron, RLS, 3 loại Blind Box) trước khi onboard quán TRẢ PHÍ.
+Task kế tiếp : (theo user) — gợi ý TF-4 RLS bắt buộc trước Admin UI; hoặc smoke thủ công trên thiết bị thật (GPS/vibrate/audio) trước pilot.
+⚠️ Treo: **schema.sql (validate_voucher) chưa apply Supabase** · **push S15–S26 chưa lên GitHub** (local `a175cc9`+1). (✅ T0-4 live · ✅ D-017 · ✅ MVP code xong.)
+MVP tiến độ  : 25 / 25 tasks hoàn thành 🎉
 
 ═══════════════════════════════════════════════
 ## TIẾN ĐỘ
@@ -24,8 +24,8 @@ MVP tiến độ  : 24 / 25 tasks hoàn thành
 | Phase 2: Timer, Phases & Blind Box | 7 | 7 | 100% |
 | Phase 3: Claim & Voucher | 5 | 5 | 100% |
 | Phase 4: POS Validation | 2 | 2 | 100% |
-| Phase 5: Polish | 4 | 3 | 75% |
-| **Tổng MVP** | **25** | **24** | **96%** |
+| Phase 5: Polish | 4 | 4 | 100% |
+| **Tổng MVP** | **25** | **25** | **100%** 🎉 |
 
 ═══════════════════════════════════════════════
 ## SESSION LOG
@@ -772,6 +772,27 @@ MVP tiến độ  : 24 / 25 tasks hoàn thành
 
 **Task tiếp theo:** T5-4 — Smoke test end-to-end (deps tất cả) → task MVP CUỐI
 **Bước tiếp theo:** Checklist E2E toàn luồng (landing→START→phases→Blind Box→claim GPS/bypass→voucher→POS validate + double-redeem block) — gom bằng chứng từ test/render đã có; cân nhắc 1 test E2E gộp. Cần user apply schema.sql cho live cuối.
+
+### Session 26 — 2026-06-05 — T5-4 Smoke test end-to-end  🎉 MVP HOÀN TẤT
+**Task:** T5-4 — Smoke test end-to-end  |  **Kết quả:** ✅  (**MVP 25/25 — 100%**)
+
+**Files tạo/sửa:**
+- `test/e2e.test.ts` — TẠO: 1 test smoke LIVE gộp toàn luồng backend qua Server Actions thật: createSession → validateSubQuest (sai "0000"→valid:false, đúng "1234"→valid:true + assert DB sub_quest_passed) → backdate start_time vào Giờ Vàng → claimVoucher GPS toạ độ venue → assert voucher `OPR-…` → probe validate_voucher: nếu applied → validateVoucher VALID + lần 2 USED (double-block); chưa applied → `t.diagnostic` (không fail). Cleanup nhả voucher (full reset) + xoá session, token `0e2e…e2ee`.
+
+**Test results:**
+- `npm test` → ✅ **84 PASS / 0 FAIL / 1 SKIP** (skip = validateVoucher race live, chờ apply; **E2E live PASS 3.1s** — chain claim verify thật). tsc 0 · lint clean · build ✅.
+- **FE render smoke (next dev) — 10/10 PASS:** `/`(BẮT ĐẦU) · mock 120(Pha1)/1500(Pha2)/2200(Pha3)/2750&passed=1(NHẬN VOUCHER)/2750(Sắp xong)/3000(hết hạn)/2750&voucher(Nhận thưởng thành công) · `/session`(khôi phục) · `/validate`(KIỂM TRA) — tất cả HTTP 200.
+- **POS redeem:** Docker SQL 6/6 (S22) + validateVoucher test — double-redeem block đã chứng minh.
+
+**Quyết định kỹ thuật (ADR):**
+- **1 test E2E live gộp thay vì chỉ checklist thủ công** → smoke tự động, lặp lại được; chain claim (createSession→quest→claim→voucher) chạy THẬT ngay (3 RPC đã applied). Bước POS redeem để conditional (probe) → không phụ thuộc việc user đã apply validate_voucher chưa, vẫn xanh.
+- **Bằng chứng từng checklist item** ghi ở todo.md T5-4 (mỗi mục → test/render cụ thể) thay vì chạy lại tất cả thủ công.
+
+**Vấn đề gặp phải:**
+- tsc TS18047 `venue possibly null` (`.single()`) → `assert.ok(venue); if(!venue) return;` (pattern `.single()` → luôn guard null).
+
+**Task tiếp theo:** (HẾT MVP 🟢) — user quyết: deploy pilot thật / Fast-follow 🟡 (TF-1..TF-5) / smoke thủ công thiết bị thật (GPS/vibrate/audio).
+**Bước tiếp theo:** [vận hành] apply `schema.sql` (validate_voucher) lên Supabase + `git push` → Vercel deploy; rồi smoke thủ công trên điện thoại tại quán trước pilot.
 
 ═══════════════════════════════════════════════
 ## LỖI ĐÃ BIẾT (Technical Debt)
