@@ -129,12 +129,19 @@ CREATE TABLE device_daily_limits (
 CREATE TABLE venue_admin_users (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     venue_id     UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
-    email        VARCHAR(255) NOT NULL UNIQUE,
-    supabase_uid UUID NOT NULL UNIQUE,
-    role         VARCHAR(20) NOT NULL DEFAULT 'owner', -- owner | staff
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    email        VARCHAR(255) NOT NULL,           -- NOT UNIQUE global: owner quản lý nhiều venue → nhiều row
+    supabase_uid UUID NOT NULL,                   -- NOT UNIQUE global: cùng lý do
+    role         VARCHAR(20) NOT NULL DEFAULT 'owner', -- owner | manager
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (venue_id, supabase_uid)               -- 1 role / user / venue
 );
 ```
+
+**Role logic (RQ-001):**
+- `owner`: đăng ký tự do (email/password Supabase Auth). Có thể có nhiều row (1 row/venue) — nghĩa là 1 người quản lý nhiều venue. Có thể invite manager vào từng venue.
+- `manager`: được owner invite vào 1 venue cụ thể. Chỉ thấy/sửa venue đó. Không thể invite thêm người.
+
+**Invite flow:** Owner gửi email invite → hệ thống tạo pending row (supabase_uid null) → Manager nhận link → đăng ký/đăng nhập Supabase Auth → supabase_uid được gắn vào row.
 
 **Status flows:**
 - session: `RUNNING → COMPLETED | EXPIRED | FAILED`
@@ -286,6 +293,49 @@ RETURNING id;
 - 0 dòng → phân biệt thông báo bằng truy vấn phụ: AVAILABLE → "Chưa được claim" ❌ · REDEEMED → "Đã dùng lúc {redeemed_at}" ⚠️ · không tồn tại/hết hạn → ❌.
 - 🔵 V2: `POST /api/v1/vouchers/redeem` + `pos_api_key` cho Gói Chain.
 
+### Module 5 — Venue Location Setup  🔵 V2 (RQ-001)
+Owner/Manager đăng nhập → trang `/admin/venue/location`:
+
+1. **Lấy vị trí** (3 cách đồng bộ cùng ô lat/lng):
+   - (a) **Bản đồ tương tác** (TV2-14, RQ-003 — Leaflet + OSM, **KHÔNG cần API key**): tìm địa chỉ (Photon, free) + click/kéo ghim → tự điền lat/lng; vòng tròn vẽ theo `radius_meters`.
+   - (b) Nút "Lấy vị trí hiện tại" (Geolocation API, chủ quán mở tại quán).
+   - (c) Nhập tay lat/lng. Map nạp client-only (`dynamic ssr:false`); lỗi map → (b)/(c) vẫn dùng được.
+2. **Chỉnh bán kính:** `radius_meters` input số (10–500m, gợi ý 20–50m cho quán nhỏ).
+3. **Server Action `updateVenueLocation(venueId, lat, lng, radius)`:**
+   - Validate: lat ∈ [-90, 90] · lng ∈ [-180, 180] · radius ∈ [10, 500]
+   - Kiểm tra quyền: `venue_admin_users` có row (venueId, auth.uid()) — KHÔNG tin client
+   - `UPDATE venues SET latitude=?, longitude=?, radius_meters=? WHERE id=?`
+   - Dùng `createAdminClient()` (service_role bypass RLS — server action)
+4. **Hiệu lực ngay:** GPS claim của guest dùng toạ độ mới sau khi lưu (không cần restart).
+
+> Scope RQ-001 chỉ gồm location. Branding + sub_quest_config cấu hình: tách task riêng (TV2-1 mở rộng).
+
+### Module 6 — Venue Theme Setup  🔵 V2 (RQ-002)
+Owner/Manager đăng nhập → trang `/admin/venue/theme`:
+
+1. **Chọn theme:** lưới card N **theme preset** (xem §9) + live preview (mockup điện thoại mini).
+2. **Server Action `updateVenueTheme(venueId, themeId)`:**
+   - Validate: `themeId` ∈ whitelist preset (§9.3) — KHÔNG tin client · `venueId` UUID hợp lệ
+   - Quyền: `venue_admin_users` có row (venueId, auth.uid()) — owner HOẶC manager (ADR-011)
+   - Merge JSONB giữ field khác: `branding = branding || {"theme_id": themeId}` (đọc-merge-ghi ở action vì admin-op ít đồng thời; RPC `set_venue_theme` nếu sau cần atomic)
+   - Dùng `createAdminClient()` (service_role bypass RLS)
+3. **Hiệu lực ngay:** luồng khách của venue đọc `branding.theme_id` → áp token theme (không deploy lại).
+
+### Module 7 — Analytics Funnel  🔵 V2 (TV2-2)
+Owner/Manager đăng nhập → trang `/admin/venue/analytics`:
+
+1. **Phễu chuyển đổi 4 bước** (suy từ `focus_sessions` + `vouchers`, KHÔNG event-log — ADR-014):
+   - **Bắt đầu phiên** = tổng `focus_sessions` của venue (mọi status)
+   - **Qua Blind Box** = `sub_quest_passed = TRUE`
+   - **Nhận voucher** = session `status = 'COMPLETED'` (claim_voucher cấp voucher + set COMPLETED)
+   - **Dùng tại quán** = voucher `status = 'REDEEMED'` (POS validate)
+   - Mỗi bước hiển thị count + % so với bước đầu + % giữ lại so với bước trước.
+2. **Số liệu phụ:** tỉ lệ chuyển đổi tổng (`redeemed / total`) · breakdown trạng thái phiên (RUNNING/COMPLETED/FAILED/EXPIRED) · pool voucher (AVAILABLE/RESERVED/REDEEMED).
+3. **Truy vấn:** 9 `count` query (`count:'exact', head:true`) qua `createAdminClient()` (service_role bypass RLS); quyền: `venue_admin_users` có row (venueId, auth.uid()) — owner HOẶC manager (ADR-011).
+4. **Tính funnel:** pure ở `lib/analytics.ts` (`buildFunnel`/`conversionRate`/`pct` chia-0 an toàn) — test offline mọi biên.
+
+> **Defer:** "Phase reach" (đạt Pha 2/3) cần event-log (phase là time-derived, không lưu per-session) → task V2 riêng. Số liệu hiện là snapshot tức thời (chưa time-series). Xem ADR-014.
+
 ---
 
 ## 5. Row-Level Security  🔵 V2 (bật khi có Admin UI)
@@ -310,6 +360,15 @@ CREATE POLICY venue_isolation_vouchers ON vouchers
   FOR ALL TO authenticated
   USING ( venue_id IN (SELECT venue_id FROM venue_admin_users
                        WHERE supabase_uid = (SELECT auth.uid())) );
+
+-- (3) Owner/Manager cập nhật location venue của mình (RQ-001)
+ALTER TABLE venues ENABLE ROW LEVEL SECURITY;
+CREATE POLICY venue_update_by_admin ON venues
+  FOR UPDATE TO authenticated
+  USING ( id IN (SELECT venue_id FROM venue_admin_users
+                 WHERE supabase_uid = (SELECT auth.uid())) )
+  WITH CHECK ( id IN (SELECT venue_id FROM venue_admin_users
+                      WHERE supabase_uid = (SELECT auth.uid())) );
 
 -- service_role (Server Actions) bypass RLS hoàn toàn → user flow vẫn chạy.
 ```
@@ -349,3 +408,47 @@ CREATE POLICY venue_isolation_vouchers ON vouchers
 4. Kiểm duyệt nội dung Sổ Nhật Ký (`free_text`).
 5. Nghị định 13/2023/NĐ-CP: consent thu thập IP/fingerprint/GPS trước khi launch public.
 6. Cơ chế nạp lại kho voucher + ngưỡng & kênh alert (🟡 cron alert khi kho < 20).
+
+---
+
+## 9. Design System & Theming  🔵 V2 (RQ-002)
+
+### 9.1 Nguyên tắc
+Một ngôn ngữ thiết kế DUY NHẤT cho cả 3 mảng (khách · POS · admin): **thân thiện, gần gũi, độ tuổi 15–40**.
+Bo góc mềm (`rounded-2xl`), shadow nhẹ, spacing thoáng, tap-target lớn (mobile-first), font bo tròn hỗ trợ
+tiếng Việt đầy đủ dấu. **Luồng khách** áp theme của venue; **admin + POS** giữ tông trung tính-thân thiện cố định.
+
+### 9.2 Design tokens (CSS variables → Tailwind)
+`globals.css :root` khai báo (default = theme `cozy_cafe`):
+```
+--color-primary / --color-primary-fg     --color-accent / --color-accent-fg
+--color-bg --color-surface --color-text --color-muted --color-border
+--color-success --color-warn --color-error
+```
+`tailwind.config.ts` map `colors.{primary,accent,surface,bg,text,muted,border,success,warn,error}` →
+`var(--color-*)`. Component dùng `bg-primary text-primary-fg` … **KHÔNG hardcode `#hex` / `bg-blue-600`.**
+
+### 9.3 Theme presets
+`lib/theme.ts` (pure): `Theme = { id, name, primary, accent, surface, bg, mascot }` + `resolveTheme(themeId)`
+(unknown → default `cozy_cafe`). Pilot **4 preset**:
+
+| id | Tên | primary | accent | mascot |
+|---|---|---|---|---|
+| `cozy_cafe` *(default)* | Cozy Cafe | `#0F766E` teal ấm | `#F59E0B` amber | ☕ |
+| `cat_cafe` | Vương quốc Mèo | `#FF9F7B` coral | `#FFE0D6` peach | 🐱 |
+| `book_acoustic` | Sách & Acoustic | sage `#6B8E72` | kem `#EFE7D6` | 📖 |
+| `lofi_night` | Lo-fi Night | indigo `#4F46E5` | tím `#A78BFA` | 🌙 |
+
+(Custom-color tự do = V-sau.)
+
+### 9.4 `venues.branding` JSONB contract
+```json
+{ "theme_id": "cozy_cafe", "challenge_name": "Gác Máy 45 Phút",
+  "primary_color": "#0F766E", "accent_color": "#F59E0B" }
+```
+`primary_color`/`accent_color` = **override tuỳ chọn**; thiếu → lấy từ preset theo `theme_id`.
+`lib/branding.ts` `parseBranding` đọc thêm `theme_id` (fallback `cozy_cafe`).
+
+### 9.5 Áp theme cho khách (no-flash)
+Guest root (Server Component) đọc `venue.branding.theme_id` → `resolveTheme` → render inline `style` set
+các `--color-*` ngay từ SSR (không nhấp nháy). **Pha 3 Meditation** giữ dark/tĩnh riêng, KHÔNG theo theme.

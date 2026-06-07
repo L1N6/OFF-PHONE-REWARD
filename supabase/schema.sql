@@ -3,9 +3,8 @@
 -- Nguồn: docs/specs.md §1 (6 bảng) + §2 (function claim_voucher).
 -- Apply: Supabase Dashboard → SQL Editor (chạy 1 lần). Idempotent (re-run an toàn).
 --
--- ⚠️ RLS: KHÔNG bật ở MVP (specs.md §5). Bật RLS mà thiếu policy anon-insert sẽ
---    chặn INSERT focus_sessions → app chết. Defer sang Fast-follow TF-4.
---    Server Actions dùng service_role (bypass RLS) nên user flow vẫn chạy.
+-- RLS: Bật từ TF-4 (specs.md §5) — xem cuối file. Server Actions dùng service_role
+--    (bypass RLS hoàn toàn) nên user flow vẫn chạy ngay cả khi RLS enabled.
 -- =====================================================================
 
 -- pgcrypto: cần cho crypt()/gen_salt() ở seed.sql (bcrypt answer_hash).
@@ -117,16 +116,32 @@ CREATE TABLE IF NOT EXISTS device_daily_limits (
 );
 
 -- ---------------------------------------------------------------------
--- 1.6 venue_admin_users  🔵 V2 (Admin UI + RLS)
+-- 1.6 venue_admin_users  🟡 Fast-follow (TV2-1: Admin Auth + invite)
+-- TV2-1: composite UNIQUE per venue; supabase_uid nullable (invite flow:
+--   pre-create row trước khi user accept → link uid ở auth callback).
+-- role: owner (đăng ký tự do, sở hữu nhiều venue) | manager (được invite).
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS venue_admin_users (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     venue_id     UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
-    email        VARCHAR(255) NOT NULL UNIQUE,
-    supabase_uid UUID NOT NULL UNIQUE,
-    role         VARCHAR(20) NOT NULL DEFAULT 'owner', -- owner | staff
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    email        VARCHAR(255) NOT NULL,
+    supabase_uid UUID,
+    role         VARCHAR(20) NOT NULL DEFAULT 'owner', -- owner | manager
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_admin_venue_uid   UNIQUE (venue_id, supabase_uid),
+    CONSTRAINT uq_admin_venue_email UNIQUE (venue_id, email)
 );
+-- Migration idempotent cho DB đã tồn tại (old individual UNIQUE → composite per-venue).
+ALTER TABLE venue_admin_users DROP CONSTRAINT IF EXISTS venue_admin_users_email_key;
+ALTER TABLE venue_admin_users DROP CONSTRAINT IF EXISTS venue_admin_users_supabase_uid_key;
+DO $$ BEGIN ALTER TABLE venue_admin_users ALTER COLUMN supabase_uid DROP NOT NULL;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE venue_admin_users
+    ADD CONSTRAINT uq_admin_venue_uid UNIQUE (venue_id, supabase_uid);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE venue_admin_users
+    ADD CONSTRAINT uq_admin_venue_email UNIQUE (venue_id, email);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =====================================================================
 -- 2. Atomic claim function (pooler-safe)  🟢  — specs.md §2
@@ -274,6 +289,7 @@ BEGIN
     v_delta := FLOOR(EXTRACT(EPOCH FROM (NOW() - v_session.start_time)))::INTEGER;
 
     -- Lazy expiry: chỉ phiên RUNNING quá 48' mới chuyển EXPIRED (COMPLETED/FAILED giữ nguyên).
+
     IF v_session.status = 'RUNNING' AND v_delta > 2880 THEN
         UPDATE focus_sessions SET status = 'EXPIRED'
             WHERE id = p_session_id AND status = 'RUNNING';
@@ -482,3 +498,47 @@ BEGIN
     -- RESERVED nhưng hết hạn (UPDATE ở trên không khớp do expires_at) → không hợp lệ.
     RETURN QUERY SELECT 'INVALID'::TEXT, NULL::TIMESTAMPTZ; RETURN;
 END $$;
+
+-- =====================================================================
+-- TF-4: Row-Level Security — multi-tenant isolation + anon gate
+-- Nguồn: docs/specs.md §5.
+-- Idempotent: DROP POLICY IF EXISTS → CREATE POLICY (re-run an toàn).
+-- service_role (createAdminClient) bypass RLS hoàn toàn → user flow OK.
+-- =====================================================================
+
+-- --- Bật RLS ---
+ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vouchers       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venues         ENABLE ROW LEVEL SECURITY;
+
+-- --- focus_sessions ---
+-- (1) Anon tạo phiên (user flow không cần auth)
+DROP POLICY IF EXISTS anon_insert_session ON focus_sessions;
+CREATE POLICY anon_insert_session ON focus_sessions
+  FOR INSERT TO anon WITH CHECK (true);
+
+-- (2) Authenticated admin chỉ đọc/ghi venue của mình.
+--     (SELECT auth.uid()) để Postgres cache — tránh re-eval mỗi row.
+DROP POLICY IF EXISTS venue_isolation_sessions ON focus_sessions;
+CREATE POLICY venue_isolation_sessions ON focus_sessions
+  FOR ALL TO authenticated
+  USING ( venue_id IN (SELECT venue_id FROM venue_admin_users
+                       WHERE supabase_uid = (SELECT auth.uid())) );
+
+-- --- vouchers ---
+-- Admin chỉ thấy voucher của venue mình.
+DROP POLICY IF EXISTS venue_isolation_vouchers ON vouchers;
+CREATE POLICY venue_isolation_vouchers ON vouchers
+  FOR ALL TO authenticated
+  USING ( venue_id IN (SELECT venue_id FROM venue_admin_users
+                       WHERE supabase_uid = (SELECT auth.uid())) );
+
+-- --- venues ---
+-- Owner/Manager cập nhật location venue của mình (RQ-001 / TV2-10).
+DROP POLICY IF EXISTS venue_update_by_admin ON venues;
+CREATE POLICY venue_update_by_admin ON venues
+  FOR UPDATE TO authenticated
+  USING ( id IN (SELECT venue_id FROM venue_admin_users
+                 WHERE supabase_uid = (SELECT auth.uid())) )
+  WITH CHECK ( id IN (SELECT venue_id FROM venue_admin_users
+                      WHERE supabase_uid = (SELECT auth.uid())) );

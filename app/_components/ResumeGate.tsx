@@ -30,7 +30,10 @@ export function ResumeGate() {
   return (
     <main
       className="flex min-h-screen flex-col items-center justify-center p-6 text-white"
-      style={{ background: "linear-gradient(160deg,#0F766E,#0b3b38)" }}
+      style={{
+        background:
+          "linear-gradient(160deg, rgb(var(--color-primary)), rgb(var(--color-primary-deep)))",
+      }}
     >
       <p className="text-lg opacity-80">Đang khôi phục phiên…</p>
     </main>

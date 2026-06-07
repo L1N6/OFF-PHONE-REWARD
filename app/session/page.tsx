@@ -1,5 +1,8 @@
+import type { CSSProperties } from "react";
 import { redirect } from "next/navigation";
 import { isValidUuid } from "../../lib/uuid";
+import { getVenueBranding } from "../../lib/venueBrandingServer";
+import { brandingCssVars } from "../../lib/branding";
 import { SessionView } from "../_components/SessionView";
 import { ResumeGate } from "../_components/ResumeGate";
 
@@ -10,7 +13,7 @@ import { ResumeGate } from "../_components/ResumeGate";
  */
 export const dynamic = "force-dynamic";
 
-export default function SessionPage({
+export default async function SessionPage({
   searchParams,
 }: {
   searchParams: { id?: string; mock?: string; passed?: string; voucher?: string };
@@ -39,12 +42,18 @@ export default function SessionPage({
   const mockVoucher =
     isDev && searchParams.voucher ? searchParams.voucher : undefined;
 
+  // Áp theme venue (SSR no-flash): set --color-* lên wrapper → Shell gradient + accent đổi theo theme.
+  const branding = await getVenueBranding();
+  const themeStyle = brandingCssVars(branding) as CSSProperties;
+
   return (
-    <SessionView
-      sessionId={id}
-      mockDelta={mockDelta}
-      mockPassed={mockPassed}
-      mockVoucher={mockVoucher}
-    />
+    <div style={themeStyle}>
+      <SessionView
+        sessionId={id}
+        mockDelta={mockDelta}
+        mockPassed={mockPassed}
+        mockVoucher={mockVoucher}
+      />
+    </div>
   );
 }

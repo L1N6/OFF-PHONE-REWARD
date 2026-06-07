@@ -24,11 +24,11 @@ export function BlindBox({
   onValidate: ValidateFn;
 }) {
   return (
-    <div className="relative mx-auto w-full max-w-sm rounded-xl border-2 border-amber-300/60 bg-white/5 p-5">
+    <div className="relative mx-auto w-full max-w-sm rounded-xl border-2 border-accent/60 bg-white/5 p-5">
       {/* Visual fallback (Inv #4): vòng amber nhấp nháy — chạy cả khi vibrate fail (iOS). */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-px animate-pulse rounded-xl ring-2 ring-amber-300"
+        className="pointer-events-none absolute -inset-px animate-pulse rounded-xl ring-2 ring-accent"
       />
 
       {passed ? (
@@ -57,7 +57,7 @@ function Done() {
   return (
     <div className="relative text-center">
       <p className="text-4xl">✅</p>
-      <p className="mt-1 font-semibold text-amber-200">Đã hoàn thành nhiệm vụ!</p>
+      <p className="mt-1 font-semibold text-accent">Đã hoàn thành nhiệm vụ!</p>
       <p className="mt-1 text-xs opacity-70">
         Giữ máy tới hết 45 phút để mở khoá nhận thưởng.
       </p>
@@ -103,12 +103,12 @@ function QuestCard({
               onChange={(e) => setAnswer(e.target.value)}
               placeholder={quest.hint ?? "Nhập mã"}
               disabled={busy}
-              className="w-full rounded-md px-3 py-2 text-slate-900"
+              className="w-full rounded-md px-3 py-2 text-accent-fg"
             />
             <button
               onClick={() => submit({ answer })}
               disabled={busy || answer.trim().length === 0}
-              className="rounded-md bg-amber-400 px-4 py-2 font-semibold text-slate-900 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 font-semibold text-accent-fg disabled:opacity-50"
             >
               {busy ? "…" : "Gửi"}
             </button>
@@ -119,7 +119,7 @@ function QuestCard({
         <button
           onClick={() => submit({ confirmed: true })}
           disabled={busy}
-          className="mt-2 w-full rounded-md bg-amber-400 px-4 py-2 font-semibold text-slate-900 disabled:opacity-50"
+          className="mt-2 w-full rounded-md bg-accent px-4 py-2 font-semibold text-accent-fg disabled:opacity-50"
         >
           {busy ? "…" : (quest.confirm_button ?? "✅ Đã xong")}
         </button>

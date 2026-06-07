@@ -25,10 +25,10 @@ export interface SessionStatus {
 // Mốc (giây kể từ start_time) — specs §4 Module 2:
 //   <900 → 1 (Sudoku) · 900–2100 → 2 (Blind Box) · 2100–2700 → 3 (Meditation)
 //   2700–2880 → CLAIMABLE (Giờ Vàng) · >2880 → EXPIRED
-export const PHASE2_START = 900; // 15'
+export const PHASE2_START = 900;  // 15'
 export const PHASE3_START = 2100; // 35'
-export const CLAIM_OPEN = 2700; // 45'
-export const CLAIM_CLOSE = 2880; // 48'
+export const CLAIM_OPEN   = 2700; // 45'
+export const CLAIM_CLOSE  = 2880; // 48'
 
 /**
  * Map Δt (giây) → phase.

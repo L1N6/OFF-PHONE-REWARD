@@ -298,15 +298,66 @@
 - `[ ]` **TF-1:** OTP bypass động — `generateBypassOTP` (`crypto.randomInt`, TTL 5', single-use, gắn session_id); thay static `CASHIER_BYPASS_CODE`. (specs.md §4 Module 3)
 - `[ ]` **TF-2:** Rate-limit 3 lớp — device fingerprint (SHA-256) + IP + `device_daily_limits`. (specs.md §4 Module 1)
 - `[ ]` **TF-3:** Cron job — dọn phiên EXPIRED hằng giờ + alert khi kho voucher < 20.
-- `[ ]` **TF-4:** RLS multi-tenant — bật `focus_sessions`/`vouchers` với CẢ policy anon-insert + venue-isolation (specs.md §5). Bắt buộc trước Admin UI.
+- `[x]` **TF-4:** RLS multi-tenant — bật `focus_sessions`/`vouchers`/`venues` với CẢ policy anon-insert + venue-isolation + venue-update-by-admin (specs.md §5). ✅ Session 31
 - `[ ]` **TF-5:** Blind Box 3 loại còn lại — `numeric_range`, `observation`, `free_text` trong validateSubQuest.
 
 ---
 
 ## V2 🔵 — sau khi pilot validate xong
 
-- `[V2]` **TV2-1:** Admin panel — thêm/xoá voucher, cấu hình venue + Blind Box (cần `venue_admin_users` + RLS)
-- `[V2]` **TV2-2:** Analytics funnel — start/phase/quest/claim/redeem tracking
+- `[x]` **TV2-1:** Admin base — Supabase Auth (email/password) + multi-venue + invite flow. ✅ Session 32
+  - `lib/adminSupabase.ts` (createAuthServerClient/createAuthBrowserClient via @supabase/ssr)
+  - `middleware.ts` (session refresh + /admin route protection)
+  - `actions/adminAuth.ts` (signIn/signOut/signUp/inviteManager)
+  - `app/admin/auth/callback/route.ts` (exchange code + link supabase_uid)
+  - `/admin/login` · `/admin/register` · `/admin/dashboard`
+  - `supabase/schema.sql`: venue_admin_users — composite UNIQUE (venue_id,uid) + (venue_id,email), supabase_uid nullable, migration idempotent
+  - 96 tests PASS
+- `[x]` **TV2-10:** Venue location UI — `/admin/venue/location`: lấy GPS tại quán (1 click) hoặc nhập tay lat/lng + radius_meters → `updateVenueLocation` Server Action → hiệu lực ngay cho guest claim. Deps: TF-4 + TV2-1. (specs.md §4 Module 5). ✅ Session 33
+  - `lib/venueLocation.ts` (pure `validateLocationInput` biên lat/lng/radius) + `actions/updateVenueLocation.ts` (session → validate → ownership `venue_admin_users` → UPDATE qua `createAdminClient`)
+  - `app/admin/venue/location/page.tsx` (server: fetch venue user) + `app/_components/VenueLocationForm.tsx` (client: GPS 1-click `getPosition` + manual + radius) + link từ Dashboard
+  - KHÔNG đổi schema (venues + RLS `venue_update_by_admin` đã có từ TF-4). 108 tests PASS · tsc/lint/build clean → ADR-011
+
+- `[x]` **TV2-11:** Design system foundation + restyle đồng bộ (RQ-002 · đợt α) — specs §9 ✅ Session 35
+  **Deps:** TV2-1, TV2-10. **Context:** token hoá màu (CSS vars→Tailwind) + font, restyle CẢ guest+admin+POS về 1 tông "Cozy Cafe" (default). Giải quyết "không đồng bộ". KHÔNG đổi schema. → ADR-012
+  - [x] `globals.css`: design token CSS vars `:root` **kênh-RGB** (primary/accent + fg/deep · bg/surface/text/muted/border · success/warn/error) — default Cozy Cafe (teal `#0F766E` + amber `#F59E0B`); bỏ Arial
+  - [x] `tailwind.config.ts`: map `colors.{background,foreground,primary{,fg,deep},accent{,fg},surface,muted,border,success,warn,error}` → `rgb(var(--color-*) / <alpha-value>)` (opacity-modifier OK)
+  - [x] Font: **giữ Geist self-host** (đã có, hỗ trợ tiếng Việt) + áp lên `body` qua `var(--font-geist-sans)` — *lệch checklist: KHÔNG thêm Be Vietnam Pro để tránh fetch font sau proxy (ADR-007)/thêm dep; swap sau = 1 dòng body font-family*
+  - [x] Restyle guest: Landing/SessionView/BlindBox/ClaimPanel/Meditation/VoucherScreen/ResumeGate → token (gradient Shell dùng `rgb(var(--color-primary))`/`-deep`, amber→accent)
+  - [x] Restyle admin: Login/Register/Dashboard/VenueLocationForm + 4 pages → token (bỏ hết `bg-blue-600`/gray)
+  - [x] Restyle POS `/validate` + `error.tsx`/`loading.tsx` → token trung tính tương phản cao
+  - [x] Pha 3 Meditation giữ dark/tĩnh (Shell teal gradient, nội dung không theo theme)
+  - [x] `npm test` **108/0/0** · tsc/lint/build clean · **render thật**: admin+POS dùng `bg-primary/bg-background/...`, CSS bundle có `--color-primary:15 118 110` + `var(--font-geist-sans)`, mọi route 200/307 đúng
+
+- `[x]` **TV2-12:** Theme presets + resolver (RQ-002 · đợt β) — specs §9.3/§9.4/§9.5 ✅ Session 36
+  **Deps:** TV2-11. **Context:** `lib/theme.ts` 4 preset + `resolveTheme(theme_id)`→CSS vars; guest áp theme của venue (`branding.theme_id`). KHÔNG đổi schema (branding JSONB sẵn).
+  - [x] `lib/theme.ts` (pure): `Theme` {id,name,mascot,primary,primaryFg,primaryDeep,accent,accentFg} (kênh RGB) + `THEMES` 4 preset (`cozy_cafe` default · `cat_cafe` · `book_acoustic` · `lofi_night`) + `resolveTheme`/`isValidThemeId`/`themeCssVars` — 7 test offline
+  - [x] `lib/branding.ts`: `Branding` = {themeId, challengeName} (bỏ primaryColor/accentColor — custom-color defer V-sau); `parseBranding` đọc `theme_id` (fallback cozy_cafe) + `brandingCssVars`/`brandingMascot`
+  - [x] Guest root áp `--color-*` SSR no-flash: `Landing` (main style) + `session/page` (wrapper div) từ `venue.branding.theme_id`; `lib/venueBrandingServer.ts` (extract getBranding dùng chung)
+  - [x] mascot emoji theo theme ở Landing + token classes (bỏ inline hex cũ)
+  - [x] Test: `resolveTheme` mọi id+unknown · `themeCssVars` · `parseBranding` theme_id; **118/0/0** · tsc/lint/build clean · **render thật**: Landing inline `--color-primary:15 118 110`+`--color-accent`+☕, `/session` wrapper `--color-primary`+`-deep`
+
+- `[x]` **TV2-13:** Admin theme picker UI (RQ-002 · đợt γ) — specs §4 Module 6 ✅ Session 37 → **đóng RQ-002**
+  **Deps:** TV2-12. **Context:** `/admin/venue/theme` chọn preset + preview → `updateVenueTheme` (ownership ADR-011) → lưu `branding.theme_id`, hiệu lực ngay.
+  - [x] `actions/updateVenueTheme.ts` (`"use server"`): session → validate `venue_id` UUID + `theme_id` ∈ whitelist (`isValidThemeId`, không tin client) → ownership `venue_admin_users` (owner|manager) → đọc branding → merge `{...branding, theme_id}` (giữ challenge_name…) qua `createAdminClient()`
+  - [x] `app/admin/venue/theme/page.tsx` (server: fetch venue + `parseBranding` theme hiện tại, redirect khi chưa login) + `app/_components/VenueThemeForm.tsx` (client: lưới 4 card preset swatch+mascot + **live preview** mockup điện thoại đổi realtime, `useFormState`)
+  - [x] Link "🎨 Chọn theme" từ Dashboard (cạnh "📍 Cấu hình vị trí")
+  - [x] Test 5 (whitelist + structural action/page/form/dashboard-link); `npm test` **123/0/0** · tsc/lint/build clean · render thật `/admin/venue/theme` → 307 guard
+
+- `[x]` **TV2-14:** Map picker cho venue location (RQ-003) — specs §4 Module 5 ✅ Session 38
+  **Deps:** TV2-10. **Context:** bản đồ tương tác chọn toạ độ thay vì gõ tay. Leaflet + OSM (KHÔNG API key) + search Photon + vòng tròn bán kính. KHÔNG đổi schema/backend (lưu vẫn qua `updateVenueLocation`).
+  - [x] `lib/geosearch.ts` (pure): `photonSearchUrl` + `parsePhotonResults` (GeoJSON [lng,lat]→list) — test offline
+  - [x] `app/_components/MapPicker.tsx` (client): leaflet nạp động + OSM tiles + ghim kéo được (divIcon 📍 tránh bug asset) + click→onPick + `L.circle` bán kính + ô tìm địa chỉ Photon (debounce 400ms, dropdown)
+  - [x] `VenueLocationForm.tsx`: `dynamic(()=>import('./MapPicker'),{ssr:false})` (leaflet cần window) + wire `onPick`→setLat/setLng (2 chiều với ô số); giữ GPS + nhập tay fallback
+  - [x] Dep `leaflet@1.9` + `@types/leaflet`. `npm test` **129/0/0** (+6) · tsc/lint/build clean · render thật: leaflet lazy-chunk+CSS bundled, route 307 guard. → ADR-013
+
+- `[x]` **TV2-2:** Analytics funnel — phễu chuyển đổi cho admin ✅ Session 39
+  **Deps:** TV2-1, TF-4. **Context:** `/admin/venue/analytics` hiển thị phễu Bắt đầu→Qua Blind Box→Nhận voucher→Dùng tại quán + tỉ lệ chuyển đổi + breakdown trạng thái + pool voucher. **Suy số liệu từ `focus_sessions`+`vouchers`** (count queries) — KHÔNG bảng event-log, KHÔNG đổi schema. "Phase reach" (đạt Pha 2/3) defer (cần event-log — ADR-014). → ADR-014
+  - [x] `lib/analytics.ts` (pure): `pct` (chia-0→0), `buildFunnel` (4 bước + pctOfStart/pctOfPrev), `conversionRate`, `totalVouchers` — 8 test offline mọi biên
+  - [x] `app/admin/venue/analytics/page.tsx` (server): session-guard redirect → ownership `venue_admin_users` → 9 count query song song (`count:'exact', head:true`) qua `createAdminClient` → `buildFunnel`
+  - [x] `app/_components/AnalyticsDashboard.tsx` (presentational): stat cards + funnel bars (width=pctOfStart) + breakdown trạng thái phiên; empty-state khi 0 phiên
+  - [x] Link "📊 Thống kê" từ Dashboard (cạnh "📍 Cấu hình vị trí" / "🎨 Chọn theme")
+  - [x] Test 10 (8 pure + 2 structural page/component + dashboard-link); `npm test` **139/0/0** (+10) · tsc/lint/build clean · render thật `/admin/venue/analytics` → 307 guard
 - `[V2]` **TV2-3:** Interactive Sudoku — Phase 1 chơi được
 - `[V2]` **TV2-4:** i18n — `vi-VN` + `en-US`
 - `[V2]` **TV2-5:** Multi-venue UI — chọn venue từ danh sách

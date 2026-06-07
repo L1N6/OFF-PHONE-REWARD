@@ -7,7 +7,8 @@ import { createSession } from "../../actions/createSession";
 import { unlockAudio } from "../../lib/audio";
 import { writeStoredSessionId } from "../../lib/sessionStore";
 import { MESSAGES } from "../../lib/messages";
-import type { Branding } from "../../lib/branding";
+import { brandingCssVars, brandingMascot, type Branding } from "../../lib/branding";
+import type { CSSProperties } from "react";
 
 function errorMessage(
   error: "INVALID_TOKEN" | "RATE_LIMITED" | "SERVER_ERROR",
@@ -45,28 +46,27 @@ export function Landing({ branding }: { branding: Branding }) {
     setLoading(false);
   }
 
+  // Áp theme venue lên token (bg-primary/text-accent…) qua CSS vars trên root — no-flash.
+  const themeStyle = brandingCssVars(branding) as CSSProperties;
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6 py-12 text-center">
+    <main
+      style={themeStyle}
+      className="flex min-h-screen flex-col items-center justify-center gap-8 px-6 py-12 text-center"
+    >
       <div className="flex flex-col items-center gap-3">
-        <span
-          className="rounded-full px-4 py-1 text-xs font-semibold tracking-wide text-white"
-          style={{ backgroundColor: branding.accentColor }}
-        >
+        <span className="text-5xl" aria-hidden>
+          {brandingMascot(branding)}
+        </span>
+        <span className="rounded-full bg-accent px-4 py-1 text-xs font-semibold tracking-wide text-accent-fg">
           {branding.challengeName}
         </span>
         <h1 className="max-w-md text-balance text-3xl font-bold leading-tight sm:text-4xl">
-          Gác lại mạng xã hội{" "}
-          <span style={{ color: branding.primaryColor }}>45 phút</span>
+          Gác lại mạng xã hội <span className="text-primary">45 phút</span>
         </h1>
         <p className="max-w-sm text-balance text-base text-foreground/70">
           Tập trung 45 phút không lướt mạng xã hội — nhận ngay voucher{" "}
-          <span
-            className="font-semibold"
-            style={{ color: branding.accentColor }}
-          >
-            giảm 10%
-          </span>{" "}
-          cho ly tiếp theo.
+          <span className="font-semibold text-accent">giảm 10%</span> cho ly tiếp theo.
         </p>
       </div>
 
@@ -74,8 +74,7 @@ export function Landing({ branding }: { branding: Branding }) {
         type="button"
         onClick={handleStart}
         disabled={!isReady || loading}
-        className="w-full max-w-xs rounded-2xl px-8 py-5 text-lg font-bold text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
-        style={{ backgroundColor: branding.primaryColor }}
+        className="w-full max-w-xs rounded-2xl bg-primary px-8 py-5 text-lg font-bold text-primary-fg shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? "Đang tạo phiên…" : "BẮT ĐẦU"}
       </button>
@@ -83,7 +82,7 @@ export function Landing({ branding }: { branding: Branding }) {
       {error && (
         <p
           role="alert"
-          className="max-w-xs text-balance text-sm font-medium text-red-600"
+          className="max-w-xs text-balance text-sm font-medium text-error"
         >
           {error}
         </p>

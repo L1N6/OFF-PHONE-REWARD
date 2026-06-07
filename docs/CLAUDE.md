@@ -19,6 +19,8 @@ KHÔNG được đọc file chỉ để "hiểu context" — dùng `get_project_
 ## Nguồn sự thật (đọc kỹ)
 - **@docs/specs.md** = hợp đồng kỹ thuật DUY NHẤT cho bản build. PRD lệch specs.md → **specs.md thắng** (phần kỹ thuật).
 - **@docs/off-phone-rewards-PRD-v3.1.md** = tầm nhìn sản phẩm/kinh doanh (north star, không sửa khi code).
+- **@docs/ADR.md** = quyết định kỹ thuật quan trọng (lý do + hệ quả). Đọc trước khi thiết kế tính năng mới.
+- **@docs/BACKLOG.md** = intake zone cho yêu cầu mới + pre-pilot checklist. Luồng: BACKLOG → specs.md → todo.md.
 - Scope chốt: **Hybrid — nền móng scale-ready, pilot tinh gọn.** Tag trong specs.md: 🟢 MVP · 🟡 Fast-follow (trước quán trả phí) · 🔵 V2. **Chỉ làm 🟢 trong MVP.**
 
 ## Project
@@ -29,10 +31,13 @@ Stack: Next.js 14 App Router · TypeScript · Tailwind · Supabase PostgreSQL ·
 ```
 CLAUDE.md          ← file này (đọc đầu tiên)
 docs/
-  PLAYBOOK.md      ← orchestrator: 2 lệnh + 4 phases tự động
+  PLAYBOOK.md      ← orchestrator: 3 lệnh (implement / yêu cầu mới) + 4 phases
   HISTORY.md       ← anchor: trạng thái hiện tại + session log
   specs.md         ← nguồn kỹ thuật DUY NHẤT: schema + logic (Phase A+C đọc)
-  todo.md          ← 25 task MVP (tag 🟢) + Fast-follow + V2 (Phase A+D đọc)
+  todo.md          ← task tracker: 25 MVP ✅ + Fast-follow 🟡 + V2 🔵
+  ADR.md           ← quyết định kỹ thuật quan trọng (Phase A+D đọc/ghi)
+  BACKLOG.md       ← intake zone yêu cầu mới + pre-pilot checklist (Lệnh 3)
+  deploy.md        ← runbook Supabase + Vercel
   scratch/         ← file tạm handoff (gitignore *.md)
 app/ actions/ lib/ hooks/ supabase/
 ```

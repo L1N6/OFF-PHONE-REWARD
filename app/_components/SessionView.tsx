@@ -167,7 +167,7 @@ export function SessionView({
 
   // Lấy quest hôm nay khi vào Phase 2 (real). Mock đã có sẵn MOCK_QUESTS.
   useEffect(() => {
-    if (isMock || phase !== 2 || quests !== null) return;
+    if (isMock || (phase !== 2 && phase !== "CLAIMABLE") || quests !== null) return;
     let cancelled = false;
     getActiveQuests()
       .then((qs) => {
@@ -300,7 +300,7 @@ export function SessionView({
   return (
     <Shell>
       {infractions >= 3 && (
-        <div className="fixed inset-x-0 top-0 z-10 bg-rose-600/95 px-4 py-2 text-center text-sm font-medium text-white">
+        <div className="fixed inset-x-0 top-0 z-10 bg-error/95 px-4 py-2 text-center text-sm font-medium text-white">
           ⚠️ Bạn đã rời màn hình {infractions} lần — giữ máy xuống để hoàn thành nhé!
         </div>
       )}
@@ -316,13 +316,21 @@ export function SessionView({
         )}
         {status.phase === 3 && <Meditation />}
         {status.phase === "CLAIMABLE" && (
-          // T3-1 hiển thị nút · T3-2 GPS · T3-3 bypass · T3-4 claimVoucher (onClaim).
-          <ClaimPanel
-            view={deriveClaimView(status, passed)}
-            onClaim={handleClaim}
-            onBypass={handleBypass}
-            onClaimed={handleClaimed}
-          />
+          <div className="w-full space-y-4">
+            {!passed && (
+              <BlindBox
+                quests={quests ?? []}
+                passed={passed}
+                onValidate={handleValidate}
+              />
+            )}
+            <ClaimPanel
+              view={deriveClaimView(status, passed)}
+              onClaim={handleClaim}
+              onBypass={handleBypass}
+              onClaimed={handleClaimed}
+            />
+          </div>
         )}
       </div>
     </Shell>
@@ -335,7 +343,10 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <main
       className="flex min-h-screen flex-col items-center justify-center gap-2 p-6 text-white"
-      style={{ background: "linear-gradient(160deg,#0F766E,#0b3b38)" }}
+      style={{
+        background:
+          "linear-gradient(160deg, rgb(var(--color-primary)), rgb(var(--color-primary-deep)))",
+      }}
     >
       {children}
     </main>
@@ -353,7 +364,7 @@ function PhaseHeader({ phase, clock }: { phase: SessionPhase; clock: string }) {
           : "🎁 Giờ Vàng";
   return (
     <div className="text-center">
-      <p className="text-sm uppercase tracking-widest text-amber-300">{label}</p>
+      <p className="text-sm uppercase tracking-widest text-accent">{label}</p>
       {phase !== "CLAIMABLE" && (
         <p className="mt-1 text-5xl font-bold tabular-nums">{clock}</p>
       )}
@@ -368,7 +379,7 @@ function LandingLink() {
   return (
     <a
       href="/"
-      className="mt-4 rounded-md bg-amber-400 px-5 py-2 font-semibold text-slate-900"
+      className="mt-4 rounded-md bg-accent px-5 py-2 font-semibold text-accent-fg"
     >
       Về trang đầu
     </a>

@@ -6,10 +6,10 @@ export default function Loading() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-3 p-6">
       <div
-        className="h-10 w-10 animate-spin rounded-full border-4 border-foreground/20 border-t-foreground/70"
+        className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary"
         aria-hidden
       />
-      <p className="text-sm text-foreground/60">Đang tải…</p>
+      <p className="text-sm text-muted">Đang tải…</p>
     </main>
   );
 }

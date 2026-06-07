@@ -11,9 +11,9 @@ import { validateVoucher } from "../../actions/validateVoucher";
 const runValidate = validateVoucher;
 
 const TONE_CLASS: Record<"ok" | "warn" | "error", string> = {
-  ok: "bg-emerald-500 text-white",
-  warn: "bg-amber-400 text-slate-900",
-  error: "bg-rose-500 text-white",
+  ok: "bg-success text-white",
+  warn: "bg-accent text-accent-fg",
+  error: "bg-error text-white",
 };
 
 /**
@@ -46,10 +46,10 @@ export function Validate() {
     result && result.ok && result.status === "USED" ? result.redeemedAt : undefined;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 bg-slate-50 px-5 py-8 text-slate-900">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 bg-background px-5 py-8 text-foreground">
       <header>
         <h1 className="text-xl font-bold">Kiểm tra voucher</h1>
-        <p className="text-sm text-slate-500">Nhập mã khách đưa rồi bấm KIỂM TRA.</p>
+        <p className="text-sm text-muted">Nhập mã khách đưa rồi bấm KIỂM TRA.</p>
       </header>
 
       {view && (
@@ -74,12 +74,12 @@ export function Validate() {
           autoCapitalize="characters"
           autoComplete="off"
           disabled={busy}
-          className="w-full rounded-lg border-2 border-slate-300 px-4 py-4 text-center font-mono text-2xl tracking-wider focus:border-teal-600 focus:outline-none"
+          className="w-full rounded-lg border-2 border-border px-4 py-4 text-center font-mono text-2xl tracking-wider focus:border-primary focus:outline-none"
         />
         <button
           onClick={submit}
           disabled={busy || code.trim().length === 0}
-          className="w-full rounded-lg bg-teal-700 px-4 py-4 text-lg font-bold text-white active:scale-95 disabled:opacity-50"
+          className="w-full rounded-lg bg-primary px-4 py-4 text-lg font-bold text-primary-fg active:scale-95 disabled:opacity-50"
         >
           {busy ? "Đang kiểm tra…" : "KIỂM TRA"}
         </button>

@@ -56,7 +56,7 @@ export function Meditation() {
       <Hourglass />
       <p
         key={idx}
-        className="animate-med-fade min-h-[1.75rem] text-lg font-medium text-amber-100"
+        className="animate-med-fade min-h-[1.75rem] text-lg font-medium text-accent"
       >
         {PHRASES[idx]}
       </p>
@@ -65,7 +65,7 @@ export function Meditation() {
       ) : needGesture ? (
         <button
           onClick={enableAudio}
-          className="rounded-full bg-amber-400 px-5 py-2 text-sm font-semibold text-slate-900"
+          className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-fg"
         >
           🎵 Bật nhạc thiền
         </button>
@@ -79,7 +79,7 @@ function Hourglass() {
   return (
     <svg
       viewBox="0 0 64 96"
-      className="animate-hourglass h-28 w-20 text-amber-300"
+      className="animate-hourglass h-28 w-20 text-accent"
       fill="none"
       stroke="currentColor"
       strokeWidth="3"

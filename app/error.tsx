@@ -27,13 +27,13 @@ export default function Error({
       <div className="flex gap-3">
         <button
           onClick={reset}
-          className="rounded-md bg-teal-700 px-5 py-2 font-semibold text-white active:scale-95"
+          className="rounded-xl bg-primary px-5 py-2 font-semibold text-primary-fg active:scale-95"
         >
           Thử lại
         </button>
         <a
           href="/"
-          className="rounded-md border border-foreground/20 px-5 py-2 font-semibold"
+          className="rounded-xl border border-border px-5 py-2 font-semibold"
         >
           Về trang đầu
         </a>

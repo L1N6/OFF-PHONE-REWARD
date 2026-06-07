@@ -73,7 +73,7 @@ export function ClaimPanel({
         <p className="mt-1 text-sm opacity-80">Tiếc quá! Hẹn bạn thử lại vào ngày mai nhé.</p>
         <a
           href="/"
-          className="mt-4 inline-block rounded-md bg-amber-400 px-5 py-2 font-semibold text-slate-900"
+          className="mt-4 inline-block rounded-md bg-accent px-5 py-2 font-semibold text-accent-fg"
         >
           Về trang đầu
         </a>
@@ -83,9 +83,9 @@ export function ClaimPanel({
 
   if (view === "NEED_QUEST") {
     return (
-      <div className="mx-auto max-w-sm rounded-xl border-2 border-amber-300/50 bg-white/5 p-5 text-center">
+      <div className="mx-auto max-w-sm rounded-xl border-2 border-accent/50 bg-white/5 p-5 text-center">
         <p className="text-3xl">📦</p>
-        <p className="mt-2 font-semibold text-amber-200">Sắp xong rồi!</p>
+        <p className="mt-2 font-semibold text-accent">Sắp xong rồi!</p>
         <p className="mt-1 text-sm opacity-85">{MESSAGES.questNotPassedInWindow}</p>
       </div>
     );
@@ -140,7 +140,7 @@ export function ClaimPanel({
           {step.k === "idle" && (
             <button
               onClick={startClaim}
-              className="mt-4 w-full rounded-2xl bg-amber-400 px-6 py-5 text-2xl font-extrabold text-slate-900 shadow-lg shadow-amber-400/30 transition active:scale-95"
+              className="mt-4 w-full rounded-2xl bg-accent px-6 py-5 text-2xl font-extrabold text-accent-fg shadow-lg shadow-accent/30 transition active:scale-95"
             >
               🎁 NHẬN VOUCHER
             </button>
@@ -159,7 +159,7 @@ export function ClaimPanel({
               <p className="text-sm text-rose-200">{CLAIM_ERROR_MSG[step.error]}</p>
               <button
                 onClick={startClaim}
-                className="mt-3 w-full rounded-md bg-amber-400 px-4 py-2 font-semibold text-slate-900"
+                className="mt-3 w-full rounded-md bg-accent px-4 py-2 font-semibold text-accent-fg"
               >
                 Thử lại
               </button>
@@ -167,8 +167,8 @@ export function ClaimPanel({
           )}
 
           {step.k === "need_bypass" && (
-            <div className="mt-4 w-full rounded-xl border border-amber-300/40 bg-white/5 p-4">
-              <p className="text-sm text-amber-100">{step.hint}</p>
+            <div className="mt-4 w-full rounded-xl border border-accent/40 bg-white/5 p-4">
+              <p className="text-sm text-accent">{step.hint}</p>
               <button
                 onClick={startClaim}
                 className="mt-3 w-full rounded-md bg-white/15 px-4 py-2 font-semibold text-white"
@@ -202,8 +202,8 @@ function Claimed({ code }: { code: string }) {
   return (
     <div className="w-full text-center">
       <p className="text-4xl">🎉</p>
-      <p className="mt-1 font-semibold text-amber-200">Nhận thưởng thành công!</p>
-      <div className="mt-3 rounded-xl border-2 border-dashed border-amber-300 bg-white/10 p-4">
+      <p className="mt-1 font-semibold text-accent">Nhận thưởng thành công!</p>
+      <div className="mt-3 rounded-xl border-2 border-dashed border-accent bg-white/10 p-4">
         <p className="text-xs uppercase tracking-widest opacity-70">Mã voucher</p>
         <p className="mt-1 select-all font-mono text-2xl font-bold tracking-wider">{code}</p>
       </div>
@@ -250,12 +250,12 @@ function BypassForm({
           placeholder="Mã nhân viên"
           disabled={busy}
           inputMode="numeric"
-          className="w-full rounded-md px-3 py-2 text-slate-900"
+          className="w-full rounded-md px-3 py-2 text-accent-fg"
         />
         <button
           onClick={submit}
           disabled={busy || code.trim().length === 0}
-          className="rounded-md bg-amber-400 px-4 py-2 font-semibold text-slate-900 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 font-semibold text-accent-fg disabled:opacity-50"
         >
           {busy ? "…" : "Xác nhận"}
         </button>
